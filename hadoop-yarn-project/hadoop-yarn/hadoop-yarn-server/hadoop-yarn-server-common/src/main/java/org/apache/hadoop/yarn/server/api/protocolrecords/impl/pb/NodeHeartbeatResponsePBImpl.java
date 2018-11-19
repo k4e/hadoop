@@ -31,7 +31,9 @@ import com.google.common.collect.Interners;
 import com.google.protobuf.ByteString;
 
 import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SayContainerRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerRequestPBImpl;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -51,6 +53,8 @@ import org.apache.hadoop.yarn.proto.YarnProtos.ContainerProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ResourceProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.AppCollectorDataProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.ContainerQueuingLimitProto;
+import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.NodeHeartbeatRequestProtoOrBuilder;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.SayContainerRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.SignalContainerRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.MasterKeyProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.NodeActionProto;
@@ -87,6 +91,7 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
   // NOTE: This is required for backward compatibility.
   private List<Container> containersToDecrease = null;
   private List<SignalContainerRequest> containersToSignal = null;
+  private List<SayContainerRequest> containersToSay = null;
 
   private static final Interner<ByteString> BYTE_STRING_INTERNER =
       Interners.newWeakInterner();
@@ -146,6 +151,9 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     }
     if (this.appCollectorsMap != null) {
       addAppCollectorsMapToProto();
+    }
+    if (this.containersToSay != null) {
+      addSayContainersToProto();
     }
   }
 
@@ -814,6 +822,33 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     initContainersToSignal();
     this.containersToSignal.addAll(containersToSignal);
   }
+  
+  @Override
+  public List<SayContainerRequest> getSayContainersRequestList() {
+    initContainersToSay();
+    return this.containersToSay;
+  }
+  
+  private void initContainersToSay() {
+    if (this.containersToSay != null) {
+      return;
+    }
+    NodeHeartbeatResponseProtoOrBuilder p = viaProto ? proto : builder;
+    List<SayContainerRequestProto> list = p.getContainersToSayList();
+    this.containersToSay = new ArrayList<SayContainerRequest>();
+    for (SayContainerRequestProto c : list) {
+      this.containersToSay.add(convertFromProtoFormat(c));
+    }
+  }
+  
+  @Override
+  public void addAllSayContainerRequest(List<SayContainerRequest> sayContainers) {
+    if(sayContainers == null) {
+      return;
+    }
+    initContainersToSay();
+    this.containersToSay.addAll(sayContainers);
+  }
 
   private void addContainersToSignalToProto() {
     maybeInitBuilder();
@@ -846,6 +881,32 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
         };
     builder.addAllContainersToSignal(iterable);
   }
+  
+  private void addSayContainersToProto() {
+    maybeInitBuilder();
+    builder.clearContainersToSay();
+    if (containersToSay == null) {
+      return;
+    }
+    Iterable<SayContainerRequestProto> iterable =
+        new Iterable<SayContainerRequestProto>() {
+          @Override
+          public Iterator<SayContainerRequestProto> iterator() {
+            return new Iterator<SayContainerRequestProto>() {
+              Iterator<SayContainerRequest> itr = containersToSay.iterator();
+              @Override
+              public boolean hasNext() {
+                return itr.hasNext();
+              }
+              @Override
+              public SayContainerRequestProto next() {
+                return convertToProtoFormat(itr.next());
+              }
+            };
+          }
+    };
+    builder.addAllContainersToSay(iterable);
+  }
 
   private ContainerQueuingLimit convertFromProtoFormat(
       ContainerQueuingLimitProto p) {
@@ -874,5 +935,16 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
   private TokenPBImpl convertFromProtoFormat(TokenProto p) {
     return new TokenPBImpl(p);
   }
+  
+  private SayContainerRequestPBImpl convertFromProtoFormat(
+      SayContainerRequestProto p) {
+    return new SayContainerRequestPBImpl(p);
+  }
+  
+  private SayContainerRequestProto convertToProtoFormat(
+      SayContainerRequest t) {
+    return ((SayContainerRequestPBImpl)t).getProto();
+  }
+  
 }
 

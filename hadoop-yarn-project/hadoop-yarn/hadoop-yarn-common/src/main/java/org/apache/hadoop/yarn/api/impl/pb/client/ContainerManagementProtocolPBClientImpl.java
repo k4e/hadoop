@@ -40,6 +40,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.ResourceLocalizationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ResourceLocalizationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RestartContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RollbackResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
@@ -59,6 +61,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ResourceLocalizationRe
 
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.RestartContainerResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.RollbackResponsePBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SayContainerRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SayContainerResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.StartContainersRequestPBImpl;
@@ -75,6 +79,7 @@ import org.apache.hadoop.yarn.proto.YarnServiceProtos;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerUpdateRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.GetContainerStatusesRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ResourceLocalizationRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.SayContainerRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.SignalContainerRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.StartContainersRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.StopContainersRequestProto;
@@ -276,6 +281,20 @@ public class ContainerManagementProtocolPBClientImpl implements ContainerManagem
       return new CommitResponsePBImpl(
           proxy.commitLastReInitialization(null, containerIdProto));
     } catch (ServiceException e) {
+      RPCUtil.unwrapAndThrowException(e);
+      return null;
+    }
+  }
+  
+  @Override
+  public SayContainerResponse sayContainer(SayContainerRequest request)
+      throws YarnException, IOException {
+    SayContainerRequestProto proto =
+        ((SayContainerRequestPBImpl)request).getProto();
+    try {
+      return new SayContainerResponsePBImpl(proxy.sayContainer(null, proto));
+    }
+    catch(ServiceException e) {
       RPCUtil.unwrapAndThrowException(e);
       return null;
     }

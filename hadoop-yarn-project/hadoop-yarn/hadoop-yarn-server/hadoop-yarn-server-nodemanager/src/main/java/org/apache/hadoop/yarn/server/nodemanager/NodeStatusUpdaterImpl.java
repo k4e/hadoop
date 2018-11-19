@@ -48,6 +48,8 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.VersionUtil;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -1153,6 +1155,13 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             if (!containersToSignal.isEmpty()) {
               dispatcher.getEventHandler().handle(
                   new CMgrSignalContainersEvent(containersToSignal));
+            }
+            
+            List<SayContainerRequest> sayContainers = response
+                .getSayContainersRequestList();
+            if(!sayContainers.isEmpty()) {
+              dispatcher.getEventHandler().handle(
+                  new CMgrSayContainersEvent(sayContainers));
             }
 
             // Update QueuingLimits if ContainerManager supports queuing

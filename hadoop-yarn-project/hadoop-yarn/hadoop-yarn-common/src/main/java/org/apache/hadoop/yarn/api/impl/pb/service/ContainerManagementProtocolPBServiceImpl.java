@@ -32,6 +32,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.ReInitializeContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ResourceLocalizationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RestartContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RollbackResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainersResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StopContainersResponse;
@@ -50,6 +51,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ResourceLocalizationRe
 
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.RestartContainerResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.RollbackResponsePBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SayContainerRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SayContainerResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.StartContainersRequestPBImpl;
@@ -71,6 +74,8 @@ import org.apache.hadoop.yarn.proto.YarnServiceProtos.ResourceLocalizationReques
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ResourceLocalizationResponseProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.RestartContainerResponseProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.RollbackResponseProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.SayContainerRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.SayContainerResponseProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.SignalContainerRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.SignalContainerResponseProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.StartContainersRequestProto;
@@ -261,6 +266,20 @@ public class ContainerManagementProtocolPBServiceImpl implements ContainerManage
     } catch (YarnException e) {
       throw new ServiceException(e);
     } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+  }
+  
+  @Override
+  public SayContainerResponseProto sayContainer(
+      RpcController controller, SayContainerRequestProto proto) throws
+      ServiceException {
+    SayContainerRequestPBImpl req = new SayContainerRequestPBImpl(proto);
+    try {
+      SayContainerResponse resp = real.sayContainer(req);
+      return ((SayContainerResponsePBImpl)resp).getProto();
+    }
+    catch(YarnException | IOException e) {
       throw new ServiceException(e);
     }
   }

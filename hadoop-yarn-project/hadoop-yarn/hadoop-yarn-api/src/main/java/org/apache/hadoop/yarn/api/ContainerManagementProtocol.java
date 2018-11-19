@@ -36,6 +36,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.ResourceLocalizationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ResourceLocalizationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RestartContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RollbackResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
@@ -288,4 +290,11 @@ public interface ContainerManagementProtocol {
   @Unstable
   CommitResponse commitLastReInitialization(ContainerId containerId)
       throws YarnException, IOException;
+  
+  @Public
+  @Unstable
+  default SayContainerResponse sayContainer(SayContainerRequest request)
+      throws YarnException, IOException {
+    throw new UnsupportedOperationException("sayContainer");
+  }
 }

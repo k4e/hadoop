@@ -122,6 +122,7 @@ message NodeHeartbeatResponseProto {
   repeated AppCollectorDataProto app_collectors = 16;
   // to be used in place of containers_to_decrease
   repeated ContainerProto containers_to_update = 17;
+  repeated SayContainerRequestProto containers_to_say = 18;
 }
 
 message ContainerQueuingLimitProto {

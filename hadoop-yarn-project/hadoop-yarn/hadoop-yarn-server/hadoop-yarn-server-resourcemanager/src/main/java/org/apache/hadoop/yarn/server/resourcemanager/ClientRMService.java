@@ -104,6 +104,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.ReservationSubmissionRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationSubmissionResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SubmitApplicationRequest;
@@ -168,6 +170,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptE
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeSayContainerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeSignalContainerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNodeReport;
@@ -1837,7 +1840,59 @@ public class ClientRMService extends AbstractService implements
     response.setResourceTypeInfo(ResourceUtils.getResourcesTypeInfo());
     return response;
   }
-
+  
+  @Override
+  public SayContainerResponse sayAtContainer(SayContainerRequest request)
+      throws YarnException, IOException {
+    ContainerId containerId = request.getContainerId();
+    UserGroupInformation callerUGI;
+    try {
+      callerUGI = UserGroupInformation.getCurrentUser();
+    }
+    catch(IOException e) {
+      LOG.info("Error getting UGI ", e);
+      throw RPCUtil.getRemoteException(e);
+    }
+    ApplicationId applicationId = containerId.getApplicationAttemptId()
+        .getApplicationId();
+    RMApp application = this.rmContext.getRMApps().get(applicationId);
+    if (application == null) {
+      RMAuditLogger.logFailure(callerUGI.getUserName(), AuditConstants.EXPERIMENT,
+        "UNKNOWN", "ClientRMService", "Trying to say at an absent container",
+        applicationId, containerId, null);
+      throw RPCUtil
+        .getRemoteException("Trying to say at an absent container " + containerId);
+    }
+    if (!checkAccess(callerUGI, application.getUser(),
+        ApplicationAccessType.VIEW_APP, application)) {
+      RMAuditLogger.logFailure(callerUGI.getShortUserName(),
+          AuditConstants.EXPERIMENT, "User doesn't have permissions to "
+            + ApplicationAccessType.VIEW_APP.toString(), "ClientRMService",
+          AuditConstants.UNAUTHORIZED_USER, applicationId);
+      throw RPCUtil.getRemoteException(new AccessControlException("User "
+          + callerUGI.getShortUserName() + " cannot perform operation "
+          + ApplicationAccessType.VIEW_APP.name() + " on " + applicationId));
+    }
+    RMContainer container = scheduler.getRMContainer(containerId);
+    if (container != null) {
+      this.rmContext.getDispatcher().getEventHandler().handle(
+        new RMNodeSayContainerEvent(container.getContainer().getNodeId(),
+          request));
+      RMAuditLogger.logSuccess(callerUGI.getShortUserName(),
+        AuditConstants.EXPERIMENT, "ClientRMService", applicationId,
+        containerId, null);      
+    } else {
+      RMAuditLogger.logFailure(callerUGI.getUserName(),
+        AuditConstants.EXPERIMENT, "UNKNOWN", "ClientRMService",
+        "Trying to say at an absent container", applicationId, containerId,
+        null);
+      throw RPCUtil
+        .getRemoteException("Trying to say at an absent container "
+            + containerId);
+    }
+    return recordFactory.newRecordInstance(SayContainerResponse.class);
+  }
+  
   @VisibleForTesting
   public void setDisplayPerUserApps(boolean displayPerUserApps) {
     this.filterAppsByUser = displayPerUserApps;

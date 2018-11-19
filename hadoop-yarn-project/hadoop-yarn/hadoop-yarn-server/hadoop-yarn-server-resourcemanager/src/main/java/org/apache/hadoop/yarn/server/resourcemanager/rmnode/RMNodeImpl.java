@@ -35,6 +35,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -42,6 +43,7 @@ import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.Container;
@@ -181,6 +183,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
   private final Map<ContainerId, Container> nmReportedIncreasedContainers =
       new HashMap<>();
+  
+  private final List<SayContainerRequest> sayContainers =
+      new ArrayList<>();
 
   private NodeHeartbeatResponse latestNodeHeartBeatResponse = recordFactory
       .newRecordInstance(NodeHeartbeatResponse.class);
@@ -240,6 +245,15 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       .addTransition(NodeState.RUNNING, NodeState.SHUTDOWN,
           RMNodeEventType.SHUTDOWN,
           new DeactivateNodeTransition(NodeState.SHUTDOWN))
+      .addTransition(NodeState.RUNNING, NodeState.RUNNING, RMNodeEventType.SAY_CONTAINER,
+          new SingleArcTransition<RMNodeImpl, RMNodeEvent>() {
+            @Override
+            public void transition(RMNodeImpl operand, RMNodeEvent event) {
+              RMNodeSayContainerEvent sayEvent = (RMNodeSayContainerEvent)event;
+              operand.sayContainers.add(sayEvent.getSayRequest());
+            }
+          }
+        )
 
       //Transitions from REBOOTED state
       .addTransition(NodeState.REBOOTED, NodeState.REBOOTED,
@@ -609,11 +623,13 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       response.addContainersToBeRemovedFromNM(
           new ArrayList<ContainerId>(this.containersToBeRemovedFromNM));
       response.addAllContainersToSignal(this.containersToSignal);
+      response.addAllSayContainerRequest(this.sayContainers);
       this.completedContainers.removeAll(this.containersToBeRemovedFromNM);
       this.containersToClean.clear();
       this.finishedApplications.clear();
       this.containersToSignal.clear();
       this.containersToBeRemovedFromNM.clear();
+      this.sayContainers.clear();
 
       response.addAllContainersToUpdate(toBeUpdatedContainers.values());
       toBeUpdatedContainers.clear();

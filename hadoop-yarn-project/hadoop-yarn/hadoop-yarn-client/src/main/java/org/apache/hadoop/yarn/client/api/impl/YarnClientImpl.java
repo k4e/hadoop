@@ -83,6 +83,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.ReservationSubmissionRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationSubmissionResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SubmitApplicationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationPriorityRequest;
@@ -976,5 +977,13 @@ public class YarnClientImpl extends YarnClient {
     GetAllResourceTypeInfoRequest request =
         GetAllResourceTypeInfoRequest.newInstance();
     return rmClient.getResourceTypeInfo(request).getResourceTypeInfo();
+  }
+  
+  @Override
+  public void sayAtContainer(ContainerId containerId, String message)
+      throws YarnException, IOException {
+    SayContainerRequest request =
+        SayContainerRequest.newInstance(containerId, message);
+    rmClient.sayAtContainer(request);
   }
 }

@@ -211,6 +211,11 @@ public class ContainersLauncher extends AbstractService
             StringUtils.stringifyException(e));
         }
         break;
+      case SAY_CONTAINER:
+        SayContainersLancherEvent sayEvent = (SayContainersLancherEvent)event;
+        LOG.warn(String.format("[say] containerId = %s; message = %s",
+            containerId.toString(), sayEvent.getMessage()));
+        break;
     }
   }
 }

@@ -900,4 +900,11 @@ public abstract class YarnClient extends AbstractService {
   @Unstable
   public abstract List<ResourceTypeInfo> getResourceTypeInfo()
       throws YarnException, IOException;
+  
+  @Public
+  @Unstable
+  public void sayAtContainer(ContainerId containerId, String message)
+      throws YarnException, IOException {
+    throw new UnsupportedOperationException("say");
+  }
 }

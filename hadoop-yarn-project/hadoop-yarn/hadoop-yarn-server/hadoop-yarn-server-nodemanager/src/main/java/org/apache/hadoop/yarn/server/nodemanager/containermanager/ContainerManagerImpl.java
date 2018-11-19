@@ -55,6 +55,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.ResourceLocalizationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ResourceLocalizationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RestartContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RollbackResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.SayContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
@@ -62,6 +64,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainersResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StopContainersRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StopContainersResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SayContainerRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SayContainerResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerResponsePBImpl;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -101,6 +105,7 @@ import org.apache.hadoop.yarn.server.api.records.ContainerQueuingLimit;
 import org.apache.hadoop.yarn.server.api.records.OpportunisticContainersStatus;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedContainersEvent;
+import org.apache.hadoop.yarn.server.nodemanager.CMgrSayContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrSignalContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
@@ -129,6 +134,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerReInitEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainersLauncher;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainersLauncherEventType;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.SayContainersLancherEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.SignalContainersLauncherEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.LocalResourceRequest;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ResourceLocalizationService;
@@ -1695,6 +1701,13 @@ public class ContainerManagerImpl extends CompositeService implements
         internalSignalToContainer(request, "ResourceManager");
       }
       break;
+    case SAY_CONTAINERS:
+      CMgrSayContainersEvent sayContainersEvent =
+        (CMgrSayContainersEvent)event;
+      for(SayContainerRequest req : sayContainersEvent.getSayContainers()) {
+        internalSayContainer(req, "ResourceManager");
+      }
+      break;
     default:
         throw new YarnRuntimeException(
             "Got an unknown ContainerManagerEvent type: " + event.getType());
@@ -1911,6 +1924,23 @@ public class ContainerManagerImpl extends CompositeService implements
     Set<ApplicationId> invalidApps = logHandler.getInvalidTokenApps();
     if (!invalidApps.isEmpty()) {
       dispatcher.getEventHandler().handle(new LogHandlerTokenUpdatedEvent());
+    }
+  }
+  
+  @Override
+  public SayContainerResponse sayContainer(SayContainerRequest request) {
+    internalSayContainer(request, "ApplicationMaster");
+    return new SayContainerResponsePBImpl();
+  }
+  
+  private void internalSayContainer(SayContainerRequest req, String sendBy) {
+    ContainerId containerId = req.getContainerId();
+    Container container = this.context.getContainers().get(containerId);
+    if (container != null) {
+      this.dispatcher.getEventHandler().handle(
+          new SayContainersLancherEvent(container, req.getMessage()));
+    } else {
+      LOG.info("Container " + containerId + " no longer exists");
     }
   }
 }

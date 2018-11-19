@@ -304,6 +304,9 @@ public class ApplicationCLI extends YarnCLI {
           " Default command is OUTPUT_THREAD_DUMP.");
       opts.getOption(SIGNAL_CMD).setArgName("container ID [signal command]");
       opts.getOption(SIGNAL_CMD).setArgs(3);
+      opts.addOption(SAY_CMD, true, "Log message");
+      opts.getOption(SAY_CMD).setArgName("container> <ID> <Message");
+      opts.getOption(SAY_CMD).setArgs(3);
     }
 
     int exitCode = -1;
@@ -626,7 +629,24 @@ public class ApplicationCLI extends YarnCLI {
         }
         return client.actionStart(appName);
       }
-    } else {
+    }
+    else if (cliParser.hasOption(SAY_CMD)) {
+      if (hasAnyOtherCLIOptions(cliParser, opts, SAY_CMD)) {
+        printUsage(title, opts);
+        return exitCode;
+      }
+      final String[] sayArgs = cliParser.getOptionValues(SAY_CMD);
+      final String which = sayArgs[0];
+      final String containerId = sayArgs[1];
+      final String message = sayArgs[2];
+      if("container".equals(which)) {
+        sayAtContainer(containerId, message);
+      }
+      else {
+        syserr.print("Say at container?");
+        return exitCode;
+      }
+     } else {
       syserr.println("Invalid Command Usage : ");
       printUsage(title, opts);
     }
@@ -1191,5 +1211,11 @@ public class ApplicationCLI extends YarnCLI {
       }
     }
     return false;
+  }
+  
+  private void sayAtContainer(String containerIdStr, String message)
+      throws IOException, YarnException {
+    ContainerId containerId = ContainerId.fromString(containerIdStr);
+    client.sayAtContainer(containerId, message);
   }
 }
