@@ -64,4 +64,5 @@ service ApplicationClientProtocolService {
   rpc getResourceProfiles(GetAllResourceProfilesRequestProto) returns (GetAllResourceProfilesResponseProto);
   rpc getResourceProfile(GetResourceProfileRequestProto) returns (GetResourceProfileResponseProto);
   rpc getResourceTypeInfo(GetAllResourceTypeInfoRequestProto) returns (GetAllResourceTypeInfoResponseProto);
+  rpc moveContainer(ContainerMigrationRequestProto) returns (ContainerMigrationResponseProto);
 }

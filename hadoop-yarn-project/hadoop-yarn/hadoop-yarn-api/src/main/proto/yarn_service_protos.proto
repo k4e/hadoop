@@ -307,6 +307,17 @@ message GetAllResourceTypeInfoResponseProto {
   repeated ResourceTypeInfoProto resource_type_info = 1;
 }
 
+message ContainerMigrationRequestProto {
+  optional ContainerIdProto container_id = 1;
+  optional NodeIdProto destination = 2;
+}
+
+message ContainerMigrationResponseProto {
+}
+
+message ContainerCheckpointResponseProto {
+}
+
 //////////////////////////////////////////////////////
 /////// client_NM_Protocol ///////////////////////////
 //////////////////////////////////////////////////////
