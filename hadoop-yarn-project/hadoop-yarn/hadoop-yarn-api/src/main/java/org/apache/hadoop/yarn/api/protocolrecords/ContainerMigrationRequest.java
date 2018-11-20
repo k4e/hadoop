@@ -13,7 +13,7 @@ public abstract class ContainerMigrationRequest {
 
   @Public
   @Unstable
-  public ContainerMigrationRequest newInstance(ContainerId containerId,
+  public static ContainerMigrationRequest newInstance(ContainerId containerId,
       NodeId destination) {
     ContainerMigrationRequest req =
         Records.newRecord(ContainerMigrationRequest.class);

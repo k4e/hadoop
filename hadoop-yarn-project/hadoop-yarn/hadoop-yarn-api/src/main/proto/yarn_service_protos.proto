@@ -308,11 +308,16 @@ message GetAllResourceTypeInfoResponseProto {
 }
 
 message ContainerMigrationRequestProto {
-  optional ContainerIdProto container_id = 1;
-  optional NodeIdProto destination = 2;
+  required ContainerIdProto container_id = 1;
+  required NodeIdProto destination = 2;
 }
 
 message ContainerMigrationResponseProto {
+}
+
+message ContainerCheckpointRequestProto {
+  required ContainerIdProto container_id = 1;
+  required int32 port = 2;
 }
 
 message ContainerCheckpointResponseProto {

@@ -12,8 +12,8 @@ public abstract class ContainerCheckpointRequest {
 
   @Public
   @Unstable
-  public ContainerCheckpointRequest newInstance(ContainerId containerId,
-      int port) {
+  public static ContainerCheckpointRequest newInstance(
+      ContainerId containerId, int port) {
     ContainerCheckpointRequest req =
         Records.newRecord(ContainerCheckpointRequest.class);
     req.setContainerId(containerId);
