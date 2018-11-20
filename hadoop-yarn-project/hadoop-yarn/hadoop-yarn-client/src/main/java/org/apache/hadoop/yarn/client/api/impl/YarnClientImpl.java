@@ -41,6 +41,7 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.FailApplicationAttemptRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetAllResourceProfilesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetAllResourceTypeInfoRequest;
@@ -976,5 +977,13 @@ public class YarnClientImpl extends YarnClient {
     GetAllResourceTypeInfoRequest request =
         GetAllResourceTypeInfoRequest.newInstance();
     return rmClient.getResourceTypeInfo(request).getResourceTypeInfo();
+  }
+  
+  @Override
+  public void moveContainer(ContainerId containerId, NodeId destination)
+      throws YarnException, IOException {
+    ContainerMigrationRequest request =
+        ContainerMigrationRequest.newInstance(containerId, destination);
+    rmClient.moveContainer(request);
   }
 }

@@ -56,6 +56,8 @@ import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.ApplicationsRequestScope;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.FailApplicationAttemptRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.FailApplicationAttemptResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptReportRequest;
@@ -1836,6 +1838,14 @@ public class ClientRMService extends AbstractService implements
         GetAllResourceTypeInfoResponse.newInstance();
     response.setResourceTypeInfo(ResourceUtils.getResourcesTypeInfo());
     return response;
+  }
+  
+  @Override
+  public ContainerMigrationResponse moveContainer(
+      ContainerMigrationRequest request) throws YarnException, IOException {
+    // TODO コンテナ マイグレーションの実装
+    return recordFactory.newRecordInstance(
+        ContainerMigrationResponse.class);
   }
 
   @VisibleForTesting

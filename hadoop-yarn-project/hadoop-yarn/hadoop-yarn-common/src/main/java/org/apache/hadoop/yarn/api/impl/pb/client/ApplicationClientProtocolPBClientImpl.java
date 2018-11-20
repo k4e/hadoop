@@ -33,6 +33,8 @@ import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocolPB;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.FailApplicationAttemptRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.FailApplicationAttemptResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptReportRequest;
@@ -97,6 +99,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.GetResourceProfileRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetResourceProfileResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.CancelDelegationTokenRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.CancelDelegationTokenResponsePBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerMigrationRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerMigrationResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.FailApplicationAttemptRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.FailApplicationAttemptResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.GetApplicationAttemptReportRequestPBImpl;
@@ -669,6 +673,20 @@ public class ApplicationClientProtocolPBClientImpl implements ApplicationClientP
       return new GetAllResourceTypeInfoResponsePBImpl(
           proxy.getResourceTypeInfo(null, requestProto));
     } catch (ServiceException e) {
+      RPCUtil.unwrapAndThrowException(e);
+      return null;
+    }
+  }
+  
+  @Override
+  public ContainerMigrationResponse moveContainer(
+      ContainerMigrationRequest request) throws YarnException, IOException {
+    YarnServiceProtos.ContainerMigrationRequestProto requestProto =
+        ((ContainerMigrationRequestPBImpl)request).getProto();
+    try {
+      return new ContainerMigrationResponsePBImpl(
+          proxy.moveContainer(null, requestProto));
+    } catch(ServiceException e) {
       RPCUtil.unwrapAndThrowException(e);
       return null;
     }

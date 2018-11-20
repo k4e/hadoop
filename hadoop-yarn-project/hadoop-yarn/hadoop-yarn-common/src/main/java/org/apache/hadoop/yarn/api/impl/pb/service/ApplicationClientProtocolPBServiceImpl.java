@@ -30,6 +30,7 @@ import org.apache.hadoop.security.proto.SecurityProtos.RenewDelegationTokenRespo
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocolPB;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.FailApplicationAttemptResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptReportResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptsResponse;
@@ -63,6 +64,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.GetAllResourceTypeInfoResponse
 import org.apache.hadoop.yarn.api.protocolrecords.GetResourceProfileResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.CancelDelegationTokenRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.CancelDelegationTokenResponsePBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerMigrationRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerMigrationResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.FailApplicationAttemptRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.FailApplicationAttemptResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.GetApplicationAttemptReportRequestPBImpl;
@@ -127,6 +130,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.GetResourceProfileRequ
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.GetResourceProfileResponsePBImpl;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerMigrationRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerMigrationResponseProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.FailApplicationAttemptRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.FailApplicationAttemptResponseProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.GetApplicationAttemptReportRequestProto;
@@ -692,6 +697,20 @@ public class ApplicationClientProtocolPBServiceImpl implements ApplicationClient
       throw new ServiceException(ye);
     } catch (IOException ie) {
       throw new ServiceException(ie);
+    }
+  }
+  
+  @Override
+  public ContainerMigrationResponseProto moveContainer(
+      RpcController controller, ContainerMigrationRequestProto proto)
+      throws ServiceException {
+    ContainerMigrationRequestPBImpl req = new ContainerMigrationRequestPBImpl(
+        proto);
+    try {
+      ContainerMigrationResponse resp = real.moveContainer(req);
+      return ((ContainerMigrationResponsePBImpl)resp).getProto();
+    } catch (YarnException | IOException e) {
+      throw new ServiceException(e);
     }
   }
 }
