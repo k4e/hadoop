@@ -43,6 +43,8 @@ import org.apache.hadoop.service.Service;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.CommitResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
@@ -101,6 +103,7 @@ import org.apache.hadoop.yarn.server.api.records.ContainerQueuingLimit;
 import org.apache.hadoop.yarn.server.api.records.OpportunisticContainersStatus;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedContainersEvent;
+import org.apache.hadoop.yarn.server.nodemanager.CMgrContainerCheckpointEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrSignalContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
@@ -1695,6 +1698,14 @@ public class ContainerManagerImpl extends CompositeService implements
         internalSignalToContainer(request, "ResourceManager");
       }
       break;
+    case CHECKPOINT_CONTAINERS:
+      CMgrContainerCheckpointEvent containerCheckpointEvent =
+          (CMgrContainerCheckpointEvent)event;
+      for (ContainerCheckpointRequest request :
+          containerCheckpointEvent.getContainerCheckpoints()) {
+        internalCheckpointContainer(request);
+      }
+      break;
     default:
         throw new YarnRuntimeException(
             "Got an unknown ContainerManagerEvent type: " + event.getType());
@@ -1899,6 +1910,11 @@ public class ContainerManagerImpl extends CompositeService implements
     } else {
       LOG.info("Container " + containerId + " no longer exists");
     }
+  }
+  
+  private void internalCheckpointContainer(ContainerCheckpointRequest request)
+  {
+    // TODO チェックポイントの実装
   }
 
   @Override
