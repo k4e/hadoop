@@ -42,6 +42,7 @@ import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.Container;
@@ -181,6 +182,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
   private final Map<ContainerId, Container> nmReportedIncreasedContainers =
       new HashMap<>();
+  
+  private final List<ContainerCheckpointRequest> containerCheckpoints =
+      new ArrayList<>();
 
   private NodeHeartbeatResponse latestNodeHeartBeatResponse = recordFactory
       .newRecordInstance(NodeHeartbeatResponse.class);
@@ -240,6 +244,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       .addTransition(NodeState.RUNNING, NodeState.SHUTDOWN,
           RMNodeEventType.SHUTDOWN,
           new DeactivateNodeTransition(NodeState.SHUTDOWN))
+      .addTransition(NodeState.RUNNING, NodeState.RUNNING,
+          RMNodeEventType.CHECKPOINT_CONTAINER,
+          new ContainerCheckpointTransition())
 
       //Transitions from REBOOTED state
       .addTransition(NodeState.REBOOTED, NodeState.REBOOTED,
@@ -1288,6 +1295,16 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
       rmNode.containersToSignal.add(((
           RMNodeSignalContainerEvent) event).getSignalRequest());
+    }
+  }
+  
+  public static class ContainerCheckpointTransition implements
+      SingleArcTransition<RMNodeImpl, RMNodeEvent> {
+    
+    @Override
+    public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
+      rmNode.containerCheckpoints.add(((
+          RMNodeContainerCheckpointEvent)event).getCheckpointRequest());
     }
   }
 

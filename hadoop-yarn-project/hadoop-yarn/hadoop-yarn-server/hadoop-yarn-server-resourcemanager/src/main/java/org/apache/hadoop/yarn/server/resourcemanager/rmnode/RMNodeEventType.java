@@ -46,6 +46,7 @@ public enum RMNodeEventType {
 
   // Source: ClientRMService
   SIGNAL_CONTAINER,
+  CHECKPOINT_CONTAINER,
 
   // Source: RMAppAttempt
   FINISHED_CONTAINERS_PULLED_BY_AM,

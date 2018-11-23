@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.Container;
@@ -118,4 +119,10 @@ public abstract class NodeHeartbeatResponse {
 
   public abstract void addAllContainersToDecrease(
       Collection<Container> containersToDecrease);
+  
+  public abstract List<ContainerCheckpointRequest>
+      getContainerCheckpointsList();
+  
+  public abstract void addAllContainerCheckpoints(
+      List<ContainerCheckpointRequest> containerCheckpoints);
 }

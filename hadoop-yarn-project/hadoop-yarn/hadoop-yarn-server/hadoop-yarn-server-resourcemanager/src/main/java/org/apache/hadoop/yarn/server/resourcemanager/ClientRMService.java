@@ -56,6 +56,7 @@ import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.ApplicationsRequestScope;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.FailApplicationAttemptRequest;
@@ -129,6 +130,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ApplicationTimeoutType;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerReport;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Priority;
@@ -170,6 +172,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptE
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeContainerCheckpointEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeSignalContainerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNodeReport;
@@ -1843,9 +1846,47 @@ public class ClientRMService extends AbstractService implements
   @Override
   public ContainerMigrationResponse moveContainer(
       ContainerMigrationRequest request) throws YarnException, IOException {
+    final int SOURCE_PORT = 11111;  // TODO 設定できるようにする
     // TODO コンテナ マイグレーションの実装
-    return recordFactory.newRecordInstance(
-        ContainerMigrationResponse.class);
+    ContainerId containerId = request.getContainerId();
+    NodeId destinationNodeId = request.getDestination();
+    UserGroupInformation callerUGI;
+    try {
+      callerUGI = UserGroupInformation.getCurrentUser();
+    } catch (IOException e) {
+      LOG.info("Error getting UGI ", e);
+      throw RPCUtil.getRemoteException(e);
+    }
+    ApplicationId applicationId = containerId.getApplicationAttemptId()
+        .getApplicationId();
+    RMApp application = verifyUserAccessForRMApp(applicationId, callerUGI,
+        AuditConstants.CONTAINER_MIGRATION, ApplicationAccessType.MODIFY_APP,
+        true);
+    RMContainer container = scheduler.getRMContainer(containerId);
+    if (container == null) {
+      String description = "Trying to migrate an absent container";
+      RMAuditLogger.logFailure(callerUGI.getUserName(),
+          AuditConstants.CONTAINER_MIGRATION, "UNKNOWN", "ClientRMService",
+          description, applicationId, containerId, null);
+      throw RPCUtil.getRemoteException(description + " " + containerId);
+    }
+    NodeId sourceNodeId = container.getContainer().getNodeId();
+    if (destinationNodeId.equals(sourceNodeId)) {
+      String description = String.format(
+          "Trying to migrate between same node (%s to %s)",
+          sourceNodeId, destinationNodeId);
+      LOG.warn(description);
+    }
+    // TODO チェックポイント リクエストを送信する
+    ContainerCheckpointRequest checkpointRequest =
+        ContainerCheckpointRequest.newInstance(containerId, SOURCE_PORT);
+    this.rmContext.getDispatcher().getEventHandler().handle(
+        new RMNodeContainerCheckpointEvent(sourceNodeId, checkpointRequest));
+    // TODO レストア リクエストを送信する
+    
+    RMAuditLogger.logSuccess(callerUGI.getShortUserName(),
+        AuditConstants.CONTAINER_MIGRATION, "ClientRMService", applicationId);
+    return recordFactory.newRecordInstance(ContainerMigrationResponse.class);
   }
 
   @VisibleForTesting
