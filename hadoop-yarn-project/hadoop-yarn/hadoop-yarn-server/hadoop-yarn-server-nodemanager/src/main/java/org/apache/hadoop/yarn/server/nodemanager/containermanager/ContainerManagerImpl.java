@@ -130,6 +130,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerImpl;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerKillEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerReInitEvent;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.CheckpointContainersLauncherEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainersLauncher;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainersLauncherEventType;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.SignalContainersLauncherEvent;
@@ -1914,7 +1915,21 @@ public class ContainerManagerImpl extends CompositeService implements
   
   private void internalCheckpointContainer(ContainerCheckpointRequest request)
   {
-    // TODO チェックポイントの実装
+    ContainerId containerId = request.getContainerId();
+    Container container = this.context.getContainers().get(containerId);
+    if (container == null) {
+      LOG.info("Container " + containerId + " no longer exists");
+      return;
+    }
+    int port = request.getPort();
+    LOG.info(String.format(
+        "Starting container checkpointing (containerId=%s, port=%d)",
+        containerId, port));
+    this.dispatcher.getEventHandler().handle(
+        new CheckpointContainersLauncherEvent(container, port));
+    LOG.info(String.format(
+        "Completed container checkpointing (containerId=%s, port=%d)",
+        containerId, port));
   }
 
   @Override

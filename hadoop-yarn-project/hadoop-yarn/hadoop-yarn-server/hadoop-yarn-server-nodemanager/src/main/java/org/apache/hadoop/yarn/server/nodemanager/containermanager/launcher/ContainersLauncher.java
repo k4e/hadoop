@@ -211,6 +211,18 @@ public class ContainersLauncher extends AbstractService
             StringUtils.stringifyException(e));
         }
         break;
+      case CHECKPOINT_CONTAINER: {
+        // TODO: チェックポイントの実装
+          LOG.info("ContainersLancher/handle()/CHECKPOINT_CONTAINER");
+          CheckpointContainersLauncherEvent checkpointEvent =
+              (CheckpointContainersLauncherEvent)event;
+          ContainerLaunch cl = running.get(containerId);
+          if (cl == null) {
+            LOG.info("Container " + containerId + " not running, checkpointing not performed.");
+            return;
+        }
+        break;
+      }
     }
   }
 }

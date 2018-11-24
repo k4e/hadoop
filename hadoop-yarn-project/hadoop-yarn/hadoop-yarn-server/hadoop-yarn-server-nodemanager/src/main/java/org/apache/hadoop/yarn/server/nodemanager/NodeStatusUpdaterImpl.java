@@ -48,6 +48,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.VersionUtil;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -1160,6 +1161,13 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
                 response.getContainerQueuingLimit();
             if (queuingLimit != null) {
               context.getContainerManager().updateQueuingLimit(queuingLimit);
+            }
+            
+            List<ContainerCheckpointRequest> containerCheckpoints = response
+                .getContainerCheckpointsList();
+            if(!containerCheckpoints.isEmpty()) {
+              dispatcher.getEventHandler().handle(
+                  new CMgrContainerCheckpointEvent(containerCheckpoints));
             }
           }
           // Handling node resource update case.
