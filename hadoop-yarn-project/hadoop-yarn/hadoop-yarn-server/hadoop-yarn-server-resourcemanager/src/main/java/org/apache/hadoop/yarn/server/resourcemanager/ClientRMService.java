@@ -1857,8 +1857,8 @@ public class ClientRMService extends AbstractService implements
       LOG.info("Error getting UGI ", e);
       throw RPCUtil.getRemoteException(e);
     }
-    ApplicationId applicationId = containerId.getApplicationAttemptId()
-        .getApplicationId();
+    ApplicationAttemptId appAttemptId = containerId.getApplicationAttemptId();
+    ApplicationId applicationId = appAttemptId.getApplicationId();
     RMApp application = verifyUserAccessForRMApp(applicationId, callerUGI,
         AuditConstants.CONTAINER_MIGRATION, ApplicationAccessType.MODIFY_APP,
         true);
