@@ -1846,7 +1846,7 @@ public class ClientRMService extends AbstractService implements
   @Override
   public ContainerMigrationResponse moveContainer(
       ContainerMigrationRequest request) throws YarnException, IOException {
-    final int SOURCE_PORT = 11111;  // TODO 設定できるようにする
+    final int DST_PORT = 12121;  // TODO 設定できるようにする
     // TODO コンテナ マイグレーションの実装
     ContainerId containerId = request.getContainerId();
     NodeId destinationNodeId = request.getDestination();
@@ -1878,11 +1878,14 @@ public class ClientRMService extends AbstractService implements
       LOG.warn(description);
     }
     // TODO チェックポイント リクエストを送信する
+    String dstAddress = destinationNodeId.getHost();
+    int dstPort = DST_PORT;
     ContainerCheckpointRequest checkpointRequest =
-        ContainerCheckpointRequest.newInstance(containerId, SOURCE_PORT);
+        ContainerCheckpointRequest.newInstance(containerId, dstAddress, 
+            dstPort);
     this.rmContext.getDispatcher().getEventHandler().handle(
         new RMNodeContainerCheckpointEvent(sourceNodeId, checkpointRequest));
-    // TODO レストア リクエストを送信する
+    // TODO リストア リクエストを送信する
     
     RMAuditLogger.logSuccess(callerUGI.getShortUserName(),
         AuditConstants.CONTAINER_MIGRATION, "ClientRMService", applicationId);
