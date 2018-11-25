@@ -1893,9 +1893,9 @@ public class ClientRMService extends AbstractService implements
     Resource capability = sourceContainer.getResource();
     ResourceRequest resourceRequest = ResourceRequest.newInstance(
         priority, hostName, capability, 1);
-    List<ResourceRequest> resourceAsk = Arrays.asList(resourceRequest);
+    List<ResourceRequest> ask = Collections.singletonList(resourceRequest);
     Allocation allocation = this.scheduler.allocate(
-        appAttemptId, resourceAsk, Collections.emptyList(),
+        appAttemptId, ask, Collections.emptyList(),
         Collections.emptyList(), Collections.emptyList(),
         Collections.emptyList(), new ContainerUpdates());
     List<Container> allocatedContainers = allocation.getContainers();
@@ -1910,11 +1910,11 @@ public class ClientRMService extends AbstractService implements
     // TODO リストア リクエストを送信する
     
     // TODO チェックポイント リクエストを送信する
-    String dstAddress = destinationNodeId.getHost();
-    int dstPort = DST_PORT;
+    String destinationAddress = destinationNodeId.getHost();
+    int destinationPort = DST_PORT;
     ContainerCheckpointRequest checkpointRequest =
-        ContainerCheckpointRequest.newInstance(sourceContainerId, dstAddress, 
-            dstPort);
+        ContainerCheckpointRequest.newInstance(sourceContainerId,
+            destinationAddress, destinationPort);
     this.rmContext.getDispatcher().getEventHandler().handle(
         new RMNodeContainerCheckpointEvent(sourceNodeId, checkpointRequest));
     // TODO 移行元のコンテナを終了する
