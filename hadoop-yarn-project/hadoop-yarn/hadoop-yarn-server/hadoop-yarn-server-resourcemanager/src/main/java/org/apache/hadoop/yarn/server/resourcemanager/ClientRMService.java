@@ -26,6 +26,7 @@ import java.nio.ByteBuffer;
 import java.security.AccessControlException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -53,6 +54,8 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ApplicationsRequestScope;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenResponse;
@@ -128,6 +131,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ApplicationTimeoutType;
+import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerReport;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -141,6 +145,8 @@ import org.apache.hadoop.yarn.api.records.ReservationAllocationState;
 import org.apache.hadoop.yarn.api.records.ReservationDefinition;
 import org.apache.hadoop.yarn.api.records.ReservationId;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.api.records.ResourceBlacklistRequest;
+import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.YarnClusterMetrics;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
@@ -174,6 +180,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeContainerCheckpointEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeSignalContainerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Allocation;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ContainerUpdates;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNodeReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
@@ -1846,9 +1854,9 @@ public class ClientRMService extends AbstractService implements
   @Override
   public ContainerMigrationResponse moveContainer(
       ContainerMigrationRequest request) throws YarnException, IOException {
-    final int DST_PORT = 12121;  // TODO 設定できるようにする
+    final int DST_PORT = 12345;  // TODO 設定できるようにする
     // TODO コンテナ マイグレーションの実装
-    ContainerId containerId = request.getContainerId();
+    ContainerId sourceContainerId = request.getContainerId();
     NodeId destinationNodeId = request.getDestination();
     UserGroupInformation callerUGI;
     try {
@@ -1857,35 +1865,59 @@ public class ClientRMService extends AbstractService implements
       LOG.info("Error getting UGI ", e);
       throw RPCUtil.getRemoteException(e);
     }
-    ApplicationAttemptId appAttemptId = containerId.getApplicationAttemptId();
+    ApplicationAttemptId appAttemptId = sourceContainerId
+        .getApplicationAttemptId();
     ApplicationId applicationId = appAttemptId.getApplicationId();
-    RMApp application = verifyUserAccessForRMApp(applicationId, callerUGI,
+    RMApp rmApp = verifyUserAccessForRMApp(applicationId, callerUGI,
         AuditConstants.CONTAINER_MIGRATION, ApplicationAccessType.MODIFY_APP,
         true);
-    RMContainer container = scheduler.getRMContainer(containerId);
-    if (container == null) {
+    RMContainer rmContainer = scheduler.getRMContainer(sourceContainerId);
+    if (rmContainer == null) {
       String description = "Trying to migrate an absent container";
       RMAuditLogger.logFailure(callerUGI.getUserName(),
           AuditConstants.CONTAINER_MIGRATION, "UNKNOWN", "ClientRMService",
-          description, applicationId, containerId, null);
-      throw RPCUtil.getRemoteException(description + " " + containerId);
+          description, applicationId, sourceContainerId, null);
+      throw RPCUtil.getRemoteException(description + " " + sourceContainerId);
     }
-    NodeId sourceNodeId = container.getContainer().getNodeId();
+    NodeId sourceNodeId = rmContainer.getContainer().getNodeId();
     if (destinationNodeId.equals(sourceNodeId)) {
       String description = String.format(
           "Trying to migrate between same node (%s to %s)",
           sourceNodeId, destinationNodeId);
       LOG.warn(description);
     }
+    // TODO 移行先のコンテナを確保する
+    Container sourceContainer = rmContainer.getContainer();
+    Priority priority = sourceContainer.getPriority();
+    String hostName = destinationNodeId.getHost();
+    Resource capability = sourceContainer.getResource();
+    ResourceRequest resourceRequest = ResourceRequest.newInstance(
+        priority, hostName, capability, 1);
+    List<ResourceRequest> resourceAsk = Arrays.asList(resourceRequest);
+    Allocation allocation = this.scheduler.allocate(
+        appAttemptId, resourceAsk, Collections.emptyList(),
+        Collections.emptyList(), Collections.emptyList(),
+        Collections.emptyList(), new ContainerUpdates());
+    List<Container> allocatedContainers = allocation.getContainers();
+    if (allocatedContainers == null || allocatedContainers.isEmpty()) {
+      String description = String.format(
+          "moveContainer: destination container allocation failed (appAttemptId=%s)",
+          appAttemptId.toString());
+      LOG.error(description);
+      return recordFactory.newRecordInstance(ContainerMigrationResponse.class);
+    }
+    Container destinationContainer = allocatedContainers.get(0);
+    // TODO リストア リクエストを送信する
+    
     // TODO チェックポイント リクエストを送信する
     String dstAddress = destinationNodeId.getHost();
     int dstPort = DST_PORT;
     ContainerCheckpointRequest checkpointRequest =
-        ContainerCheckpointRequest.newInstance(containerId, dstAddress, 
+        ContainerCheckpointRequest.newInstance(sourceContainerId, dstAddress, 
             dstPort);
     this.rmContext.getDispatcher().getEventHandler().handle(
         new RMNodeContainerCheckpointEvent(sourceNodeId, checkpointRequest));
-    // TODO リストア リクエストを送信する
+    // TODO 移行元のコンテナを終了する
     
     RMAuditLogger.logSuccess(callerUGI.getShortUserName(),
         AuditConstants.CONTAINER_MIGRATION, "ClientRMService", applicationId);
