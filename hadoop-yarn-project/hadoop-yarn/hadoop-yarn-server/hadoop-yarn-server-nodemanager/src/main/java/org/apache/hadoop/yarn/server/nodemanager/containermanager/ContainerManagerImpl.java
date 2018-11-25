@@ -1913,23 +1913,24 @@ public class ContainerManagerImpl extends CompositeService implements
     }
   }
   
-  private void internalCheckpointContainer(ContainerCheckpointRequest request)
-  {
+  private void internalCheckpointContainer(
+      ContainerCheckpointRequest request) {
     ContainerId containerId = request.getContainerId();
     Container container = this.context.getContainers().get(containerId);
     if (container == null) {
       LOG.info("Container " + containerId + " no longer exists");
       return;
     }
+    String addr = request.getAddress();
     int port = request.getPort();
     LOG.info(String.format(
-        "Starting container checkpointing (containerId=%s, port=%d)",
-        containerId, port));
+        "Starting container checkpointing (containerId=%s, address=%s, port=%d)",
+            containerId, addr, port));
     this.dispatcher.getEventHandler().handle(
-        new CheckpointContainersLauncherEvent(container, port));
+        new CheckpointContainersLauncherEvent(container, addr, port));
     LOG.info(String.format(
-        "Completed container checkpointing (containerId=%s, port=%d)",
-        containerId, port));
+        "Completed container checkpointing (containerId=%s, address=%s, port=%d)",
+            containerId, addr, port));
   }
 
   @Override

@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1888,6 +1889,50 @@ public class ContainerLaunch implements Callable<Integer> {
           .build());
     } catch (Exception e) {
       LOG.warn("Failed to delete " + path, e);
+    }
+  }
+  
+  public void checkpointContainer(String address, int port)
+      throws IOException {
+    // TODO: チェックポイントの実装
+    ContainerId containerId = container.getContainerTokenIdentifier()
+        .getContainerID();
+    String containerIdStr = containerId.toString();
+    String user = container.getUser();
+    boolean isLaunched = !containerAlreadyLaunched.compareAndSet(false, true);
+    if (!isLaunched) {
+      LOG.info("Container " + containerIdStr + " not launched. Not checkpointed");
+      return;
+    }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(String.format(
+          "Getting pid for container %d from pid file %s",
+              containerIdStr, Objects.toString(pidFilePath)));
+    }
+    try {
+      String processId = null;
+      if (pidFilePath != null) {
+        processId = getContainerPid(pidFilePath);
+      }
+      if (processId != null) {
+        // ここで CRIU dump を実行
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(String.format("Run criu dump"));
+        }
+        boolean result = true;
+        String diagnostics = String.format(
+            "Checkpointed process %s as user %s for container %s, result = %s",
+                processId, user, containerIdStr,
+                (result ? "success" : "failure"));
+        LOG.info(diagnostics);
+        dispatcher.getEventHandler().handle(
+            new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
+      }
+    } catch (Exception e) {
+      String msg = String.format(
+          "Exception while checkpointing container (containerId=%s): %s",
+          containerIdStr, StringUtils.stringifyException(e));
+      LOG.warn(msg);
     }
   }
 }

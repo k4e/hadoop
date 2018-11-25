@@ -211,18 +211,25 @@ public class ContainersLauncher extends AbstractService
             StringUtils.stringifyException(e));
         }
         break;
-      case CHECKPOINT_CONTAINER: {
-        // TODO: チェックポイントの実装
-          LOG.info("ContainersLancher/handle()/CHECKPOINT_CONTAINER");
-          CheckpointContainersLauncherEvent checkpointEvent =
-              (CheckpointContainersLauncherEvent)event;
-          ContainerLaunch cl = running.get(containerId);
-          if (cl == null) {
-            LOG.info("Container " + containerId + " not running, checkpointing not performed.");
-            return;
+      case CHECKPOINT_CONTAINER:
+        LOG.info("ContainersLancher/handle()/CHECKPOINT_CONTAINER");
+        CheckpointContainersLauncherEvent checkpointEvent =
+            (CheckpointContainersLauncherEvent)event;
+        ContainerLaunch checkpointContainerLaunch = running.get(containerId);
+        if (checkpointContainerLaunch == null) {
+          LOG.info("Container " + containerId + " not running, checkpointing not performed.");
+          return;
+        }
+        String checkpointAddress = checkpointEvent.getAddress();
+        int checkpointPort = checkpointEvent.getPort();
+        try {
+          checkpointContainerLaunch.checkpointContainer(checkpointAddress,
+              checkpointPort);
+        } catch (IOException e) {
+          LOG.info(String.format("Got exception while checkpointing container (containerId=%s, address=%s, port=%d)",
+              containerId, checkpointAddress, checkpointPort));
         }
         break;
-      }
     }
   }
 }

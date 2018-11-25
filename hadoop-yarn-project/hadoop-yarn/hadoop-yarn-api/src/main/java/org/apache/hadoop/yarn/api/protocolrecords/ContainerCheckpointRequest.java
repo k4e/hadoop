@@ -31,6 +31,14 @@ public abstract class ContainerCheckpointRequest {
   
   @Public
   @Unstable
+  public abstract String getAddress();
+  
+  @Public
+  @Unstable
+  public abstract void setAddress(String address);
+  
+  @Public
+  @Unstable
   public abstract int getPort();
   
   @Public
