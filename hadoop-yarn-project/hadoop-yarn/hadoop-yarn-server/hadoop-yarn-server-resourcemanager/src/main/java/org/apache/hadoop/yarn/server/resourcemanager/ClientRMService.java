@@ -1858,8 +1858,6 @@ public class ClientRMService extends AbstractService implements
   @Override
   public ContainerMigrationResponse moveContainer(
       ContainerMigrationRequest request) throws YarnException, IOException {
-    final int DST_PORT = 12345;  // TODO 設定できるようにする
-    // TODO コンテナ マイグレーションの実装
     ContainerId sourceContainerId = request.getContainerId();
     NodeId destinationNodeId = request.getDestination();
     UserGroupInformation callerUGI;
@@ -1869,10 +1867,9 @@ public class ClientRMService extends AbstractService implements
       LOG.info("Error getting UGI ", e);
       throw RPCUtil.getRemoteException(e);
     }
-    ApplicationAttemptId appAttemptId = sourceContainerId
-        .getApplicationAttemptId();
-    ApplicationId applicationId = appAttemptId.getApplicationId();
-    RMApp rmApp = verifyUserAccessForRMApp(applicationId, callerUGI,
+    ApplicationId applicationId = sourceContainerId.getApplicationAttemptId()
+        .getApplicationId();
+    verifyUserAccessForRMApp(applicationId, callerUGI,
         AuditConstants.CONTAINER_MIGRATION, ApplicationAccessType.MODIFY_APP,
         true);
     RMContainer rmContainer = scheduler.getRMContainer(sourceContainerId);
@@ -1884,69 +1881,40 @@ public class ClientRMService extends AbstractService implements
       throw RPCUtil.getRemoteException(description + " " + sourceContainerId);
     }
     NodeId sourceNodeId = rmContainer.getContainer().getNodeId();
-    if (destinationNodeId.equals(sourceNodeId)) {
+    RMNode rmSourceNode = this.rmContext.getRMNodes().get(sourceNodeId);
+    if (rmSourceNode == null) {
+      String description =
+          "Trying to migrate the container from an absent source node";
+      RMAuditLogger.logFailure(callerUGI.getUserName(),
+          AuditConstants.CONTAINER_MIGRATION, "UNKNOWN", "ClientRMService",
+          description, applicationId, sourceContainerId, null);
+      throw RPCUtil.getRemoteException(description + " " + sourceNodeId);
+    }
+    RMNode rmDestinationNode = this.rmContext.getRMNodes().get(destinationNodeId);
+    if (rmDestinationNode == null) {
+      String description =
+          "Trying to migrate the container to an absent destination node";
+      RMAuditLogger.logFailure(callerUGI.getUserName(),
+          AuditConstants.CONTAINER_MIGRATION, "UNKNOWN", "ClientRMService",
+          description, applicationId, sourceContainerId, null);
+      throw RPCUtil.getRemoteException(description + " " + destinationNodeId);
+    }
+    if (rmSourceNode.getNodeID().equals(rmDestinationNode.getNodeID())) {
       String description = String.format(
           "Trying to migrate between same node (%s to %s)",
-          sourceNodeId, destinationNodeId);
+          rmSourceNode.getNodeID(), rmDestinationNode.getNodeID());
       LOG.warn(description);
     }
-    // TODO 移行先のコンテナを確保する
-    Container sourceContainer = rmContainer.getContainer();
-    Priority priority = sourceContainer.getPriority();
-    String hostName = destinationNodeId.getHost();
-    Resource capability = sourceContainer.getResource();
-    LOG.info("hostName = " + hostName);
-    //ResourceRequest resourceRequest = ResourceRequest.newInstance(
-    //    priority, "localhost" /*ResourceRequest.ANY*/, capability, 1, false);
-    List<ResourceRequest> ask = Arrays.asList(
-        ResourceRequest.newInstance(priority, "localhost", capability, 1, false),
-        ResourceRequest.newInstance(priority, "/default-rack", capability, 1, false),
-        ResourceRequest.newInstance(priority, ResourceRequest.ANY, capability, 1, false)
-        );
-    ask.get(0).setAllocationRequestId(123456);
-    ask.get(1).setAllocationRequestId(123456);
-    ask.get(2).setAllocationRequestId(123456);
-    Allocation allocation = this.scheduler.allocate(
-        appAttemptId, new ArrayList<ResourceRequest>(ask), null,
-        new ArrayList<ContainerId>(), null, null, new ContainerUpdates());
-    for (int i = 0; i < 10; ++i) {
-      if (allocation != null && allocation.getContainers() != null && !allocation.getContainers().isEmpty()) {
-        LOG.info("OK!!!!!");
-        break;
-      }
-      LOG.info("Retry: " + i);
-      allocation = this.scheduler.allocate(appAttemptId, new ArrayList<ResourceRequest>(), null, new ArrayList<ContainerId>(), null, null, new ContainerUpdates());
-      try {
-        Thread.sleep(1000);
-      } catch (InterruptedException e) {
-        LOG.error(e);
-        break;
-      }
+    try {
+      rmContext.getRMContainerMigrationService().move(
+          rmContainer, rmSourceNode, rmDestinationNode);
+    } catch (YarnException e) {
+      String description = e.getMessage();
+      RMAuditLogger.logFailure(callerUGI.getUserName(),
+          AuditConstants.CONTAINER_MIGRATION, "UNKNOWN", "ClientRMService",
+          description, applicationId, sourceContainerId, null);
+      throw RPCUtil.getRemoteException(description);
     }
-    List<Container> allocatedContainers = allocation.getContainers();
-    if (allocatedContainers == null || allocatedContainers.isEmpty()) {
-      //System.out.println(resourceRequest.toString());
-      LOG.info(allocation.toString());
-      String description = String.format(
-          "moveContainer: destination container allocation failed (appAttemptId=%s)",
-          appAttemptId.toString());
-      LOG.error(description);
-      return recordFactory.newRecordInstance(ContainerMigrationResponse.class);
-    }
-    Container destinationContainer = allocatedContainers.get(0);
-    LOG.info(destinationContainer);
-    // TODO リストア リクエストを送信する
-    
-    // TODO チェックポイント リクエストを送信する
-    String destinationAddress = destinationNodeId.getHost();
-    int destinationPort = DST_PORT;
-    ContainerCheckpointRequest checkpointRequest =
-        ContainerCheckpointRequest.newInstance(sourceContainerId,
-            destinationAddress, destinationPort);
-    this.rmContext.getDispatcher().getEventHandler().handle(
-        new RMNodeContainerCheckpointEvent(sourceNodeId, checkpointRequest));
-    // TODO 移行元のコンテナを終了する
-    
     RMAuditLogger.logSuccess(callerUGI.getShortUserName(),
         AuditConstants.CONTAINER_MIGRATION, "ClientRMService", applicationId);
     return recordFactory.newRecordInstance(ContainerMigrationResponse.class);

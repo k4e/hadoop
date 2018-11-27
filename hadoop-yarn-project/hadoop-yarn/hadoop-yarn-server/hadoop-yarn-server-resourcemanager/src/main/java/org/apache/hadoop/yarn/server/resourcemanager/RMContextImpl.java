@@ -620,4 +620,16 @@ public class RMContextImpl implements RMContext {
     this.activeServiceContext.setResourceProfilesManager(mgr);
   }
   // Note: Read java doc before adding any services over here.
+
+  @Override
+  public RMContainerMigrationService getRMContainerMigrationService() {
+    return activeServiceContext.getRMContainerMigrationService();
+  }
+
+  @Override
+  public void setRMContainerMigrationService(
+      RMContainerMigrationService rmContainerMigrationService) {
+    this.activeServiceContext.setRMContainerMigrationService(
+        rmContainerMigrationService);
+  }
 }

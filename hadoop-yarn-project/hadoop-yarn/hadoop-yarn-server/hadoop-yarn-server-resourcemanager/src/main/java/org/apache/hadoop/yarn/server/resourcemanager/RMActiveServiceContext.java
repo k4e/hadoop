@@ -113,6 +113,8 @@ public class RMActiveServiceContext {
   private AllocationTagsManager allocationTagsManager;
   private PlacementConstraintManager placementConstraintManager;
   private ResourceProfilesManager resourceProfilesManager;
+  
+  private RMContainerMigrationService rmContainerMigrationService;
 
   public RMActiveServiceContext() {
     queuePlacementManager = new PlacementManager();
@@ -523,5 +525,14 @@ public class RMActiveServiceContext {
   public void setResourceProfilesManager(
       ResourceProfilesManager resourceProfilesManager) {
     this.resourceProfilesManager = resourceProfilesManager;
+  }
+  
+  public RMContainerMigrationService getRMContainerMigrationService() {
+    return rmContainerMigrationService;
+  }
+  
+  public void setRMContainerMigrationService(
+      RMContainerMigrationService rmContainerMigrationService) {
+    this.rmContainerMigrationService = rmContainerMigrationService;
   }
 }

@@ -200,6 +200,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   private final String zkRootNodePassword =
       Long.toString(new SecureRandom().nextLong());
   private boolean recoveryEnabled;
+  private RMContainerMigrationService rmContainerMigrationService;
 
   @VisibleForTesting
   protected String webAppAddress;
@@ -806,6 +807,10 @@ public class ResourceManager extends CompositeService implements Recoverable {
         addIfService(systemServiceManager);
       }
 
+      rmContainerMigrationService = createRMContainerMigrationService();
+      addService(rmContainerMigrationService);
+      rmContext.setRMContainerMigrationService(rmContainerMigrationService);
+      
       super.serviceInit(conf);
     }
 
@@ -1595,5 +1600,9 @@ public class ResourceManager extends CompositeService implements Recoverable {
 
   protected RMAppLifetimeMonitor createRMAppLifetimeMonitor() {
     return new RMAppLifetimeMonitor(this.rmContext);
+  }
+  
+  protected RMContainerMigrationService createRMContainerMigrationService() {
+    return new RMContainerMigrationService(this.rmContext);
   }
 }
