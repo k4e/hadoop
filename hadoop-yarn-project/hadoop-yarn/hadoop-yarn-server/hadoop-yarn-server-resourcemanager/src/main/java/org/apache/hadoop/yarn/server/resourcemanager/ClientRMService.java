@@ -147,8 +147,11 @@ import org.apache.hadoop.yarn.api.records.ReservationId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceBlacklistRequest;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.ResourceSizing;
+import org.apache.hadoop.yarn.api.records.SchedulingRequest;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.YarnClusterMetrics;
+import org.apache.hadoop.yarn.api.resource.PlacementConstraint;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException;
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException;
@@ -185,6 +188,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ContainerUpdates;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNodeReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.ContainerRequest;
 import org.apache.hadoop.yarn.server.resourcemanager.security.QueueACLsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMDelegationTokenSecretManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.ReservationsACLsManager;
@@ -1891,15 +1895,38 @@ public class ClientRMService extends AbstractService implements
     Priority priority = sourceContainer.getPriority();
     String hostName = destinationNodeId.getHost();
     Resource capability = sourceContainer.getResource();
-    ResourceRequest resourceRequest = ResourceRequest.newInstance(
-        priority, hostName, capability, 1);
-    List<ResourceRequest> ask = Collections.singletonList(resourceRequest);
+    LOG.info("hostName = " + hostName);
+    //ResourceRequest resourceRequest = ResourceRequest.newInstance(
+    //    priority, "localhost" /*ResourceRequest.ANY*/, capability, 1, false);
+    List<ResourceRequest> ask = Arrays.asList(
+        ResourceRequest.newInstance(priority, "localhost", capability, 1, false),
+        ResourceRequest.newInstance(priority, "/default-rack", capability, 1, false),
+        ResourceRequest.newInstance(priority, ResourceRequest.ANY, capability, 1, false)
+        );
+    ask.get(0).setAllocationRequestId(123456);
+    ask.get(1).setAllocationRequestId(123456);
+    ask.get(2).setAllocationRequestId(123456);
     Allocation allocation = this.scheduler.allocate(
-        appAttemptId, ask, Collections.emptyList(),
-        Collections.emptyList(), Collections.emptyList(),
-        Collections.emptyList(), new ContainerUpdates());
+        appAttemptId, new ArrayList<ResourceRequest>(ask), null,
+        new ArrayList<ContainerId>(), null, null, new ContainerUpdates());
+    for (int i = 0; i < 10; ++i) {
+      if (allocation != null && allocation.getContainers() != null && !allocation.getContainers().isEmpty()) {
+        LOG.info("OK!!!!!");
+        break;
+      }
+      LOG.info("Retry: " + i);
+      allocation = this.scheduler.allocate(appAttemptId, new ArrayList<ResourceRequest>(), null, new ArrayList<ContainerId>(), null, null, new ContainerUpdates());
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException e) {
+        LOG.error(e);
+        break;
+      }
+    }
     List<Container> allocatedContainers = allocation.getContainers();
     if (allocatedContainers == null || allocatedContainers.isEmpty()) {
+      //System.out.println(resourceRequest.toString());
+      LOG.info(allocation.toString());
       String description = String.format(
           "moveContainer: destination container allocation failed (appAttemptId=%s)",
           appAttemptId.toString());
@@ -1907,6 +1934,7 @@ public class ClientRMService extends AbstractService implements
       return recordFactory.newRecordInstance(ContainerMigrationResponse.class);
     }
     Container destinationContainer = allocatedContainers.get(0);
+    LOG.info(destinationContainer);
     // TODO リストア リクエストを送信する
     
     // TODO チェックポイント リクエストを送信する
