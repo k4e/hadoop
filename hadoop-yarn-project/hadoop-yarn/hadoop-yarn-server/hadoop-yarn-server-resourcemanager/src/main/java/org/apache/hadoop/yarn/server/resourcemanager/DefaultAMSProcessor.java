@@ -282,6 +282,9 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
         LOG.warn("Exceptions caught when scheduler handling requests");
         throw new YarnException(e);
       }
+      // コンテナを確保したら知らせてね
+      this.rmContext.getRMContainerMigrationService().allocateHook(
+          appAttemptId, allocation);
     }
 
     if (!blacklistAdditions.isEmpty() || !blacklistRemovals.isEmpty()) {

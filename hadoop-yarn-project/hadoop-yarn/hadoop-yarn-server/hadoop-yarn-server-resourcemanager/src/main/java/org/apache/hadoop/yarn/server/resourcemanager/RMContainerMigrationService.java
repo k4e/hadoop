@@ -2,13 +2,15 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.service.AbstractService;
@@ -33,16 +35,21 @@ public class RMContainerMigrationService extends AbstractService {
 
   private static final Log LOG = LogFactory.getLog(RMContainerMigrationService.class);
   private static final int PORT = 65432;
+  private static final int RETRY_LIMIT = 30;
   // TODO 確実にこのサービスがアロケートしたコンテナであることがわかるような方法をとる
   private static final long BASE_ALLOCATION_ID = Long.MAX_VALUE / 2 + RMContainerMigrationService.class.hashCode();
   
   private final RMContext rmContext;
   private final Map<ApplicationAttemptId, Long> migrationAttempts;
+  private final Set<Pair<ApplicationAttemptId, Long> > waitingContainers;
+  private final ConcurrentHashMap<Pair<ApplicationAttemptId, Long>, ContainerId> allocatedContainers;
   
   public RMContainerMigrationService(RMContext rmContext) {
     super(RMContainerMigrationService.class.getName());
     this.rmContext = rmContext;
     this.migrationAttempts = new HashMap<>();
+    this.waitingContainers = Collections.synchronizedSet(new HashSet<>());
+    this.allocatedContainers = new ConcurrentHashMap<>();
   }
 
   void move(RMContainer rmSourceContainer, RMNode rmSourceNode,
@@ -53,7 +60,8 @@ public class RMContainerMigrationService extends AbstractService {
     ContainerId sourceContainerId = rmSourceContainer.getContainerId();
     long migrationAttempt;
     synchronized (migrationAttempts) {
-      migrationAttempt = migrationAttempts.getOrDefault(applicationAttemptId, 0L);
+      migrationAttempt = migrationAttempts.getOrDefault(
+          applicationAttemptId, 0L);
       migrationAttempts.put(applicationAttemptId, migrationAttempt + 1L);
     }
     long allocationId = BASE_ALLOCATION_ID + migrationAttempt;
@@ -78,22 +86,15 @@ public class RMContainerMigrationService extends AbstractService {
     Allocation allocation = this.rmContext.getScheduler().allocate(
         applicationAttemptId, new ArrayList<ResourceRequest>(ask), null,
         new ArrayList<ContainerId>(), null, null, new ContainerUpdates());
+    Pair<ApplicationAttemptId, Long> waitingContainer = Pair.of(
+        applicationAttemptId, Long.valueOf(allocationId));
+    this.waitingContainers.add(waitingContainer);
     RMContainer rmDestinationContainer = null;
-    for (int retry = 0; retry < 30 && rmDestinationContainer == null; ++retry) {
-      Collection<RMContainer> containers = this.rmContext.getScheduler()
-          .getSchedulerAppInfo(applicationAttemptId).getLiveContainers();
-      LOG.info(containers);
-      for (RMContainer container : containers) {
-        long aid = container.getContainer().getAllocationRequestId();
-        if (Long.compare(allocationId, aid) == 0) {
-          ContainerId containerId = container.getContainerId();
-          rmDestinationContainer = this.rmContext.getScheduler()
-              .getRMContainer(containerId);
-          assert Objects.equals(container, rmDestinationContainer);
-          break;
-        }
-      }
-      if(rmDestinationContainer != null) {
+    for (int t = 0; t < RETRY_LIMIT && rmDestinationContainer == null; ++t) {
+      ContainerId containerId = this.allocatedContainers.get(waitingContainer);
+      if(containerId != null) {
+        rmDestinationContainer = this.rmContext.getScheduler()
+            .getRMContainer(containerId);
         break;
       }
       try {
@@ -104,7 +105,6 @@ public class RMContainerMigrationService extends AbstractService {
       }
     }
     if (rmDestinationContainer == null) {
-      LOG.info(allocation.toString());
       String description = String.format(
           "moveContainer: destination container allocation failed (appAttemptId=%s)",
           applicationAttemptId.toString());
@@ -124,5 +124,21 @@ public class RMContainerMigrationService extends AbstractService {
         new RMNodeContainerCheckpointEvent(sourceNodeId, checkpointRequest));
     // TODO 移行元のコンテナを終了する
     
+  }
+  
+  void allocateHook(ApplicationAttemptId appAttemptId, Allocation allocation) {
+    if (!this.waitingContainers.isEmpty()) {
+      for (Container container : allocation.getContainers()) {
+        long allocReqId = container.getAllocationRequestId();
+        Pair<ApplicationAttemptId, Long> key = Pair.of(
+            appAttemptId, Long.valueOf(allocReqId));
+        if (allocReqId != -1) {
+          if(this.waitingContainers.remove(key)) {
+            ContainerId containerId = container.getId();
+            this.allocatedContainers.put(key, containerId);
+          }
+        }
+      }
+    }
   }
 }
