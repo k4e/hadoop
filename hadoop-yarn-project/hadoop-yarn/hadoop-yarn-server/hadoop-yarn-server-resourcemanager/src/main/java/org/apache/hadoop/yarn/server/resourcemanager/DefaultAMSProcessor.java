@@ -283,8 +283,11 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
         throw new YarnException(e);
       }
       // コンテナを確保したら知らせてね
-      this.rmContext.getRMContainerMigrationService().allocateHook(
-          appAttemptId, allocation);
+      RMContainerMigrationService containerMigrationService = this.rmContext
+          .getRMContainerMigrationService();
+      if (containerMigrationService.isWaitingAllocation()) {
+        containerMigrationService.notifyAllocation(appAttemptId, allocation);
+      }
     }
 
     if (!blacklistAdditions.isEmpty() || !blacklistRemovals.isEmpty()) {

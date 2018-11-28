@@ -1,34 +1,35 @@
 package org.apache.hadoop.yarn.api.protocolrecords.impl.pb;
 
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerIdPBImpl;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerIdProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointRequestProto;
-import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointRequestProtoOrBuilder;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreRequestProtoOrBuilder;
 
 import com.google.protobuf.TextFormat;
 
-public class ContainerCheckpointRequestPBImpl
-    extends ContainerCheckpointRequest {
-  ContainerCheckpointRequestProto proto =
-      ContainerCheckpointRequestProto.getDefaultInstance();
-  ContainerCheckpointRequestProto.Builder builder = null;
+public class ContainerRestoreRequestPBImpl extends ContainerRestoreRequest {
+
+  ContainerRestoreRequestProto proto = ContainerRestoreRequestProto
+      .getDefaultInstance();
+  ContainerRestoreRequestProto.Builder builder = null;
   boolean viaProto = false;
   
   private ContainerId containerId;
+  private ContainerId sourceContainerId;
   
-  public ContainerCheckpointRequestPBImpl() {
-    this.builder = ContainerCheckpointRequestProto.newBuilder();
+  public ContainerRestoreRequestPBImpl() {
+    this.builder = ContainerRestoreRequestProto.newBuilder();
   }
   
-  public ContainerCheckpointRequestPBImpl(
-      ContainerCheckpointRequestProto proto) {
+  public ContainerRestoreRequestPBImpl(ContainerRestoreRequestProto proto) {
     this.proto = proto;
     this.viaProto = true;
   }
   
-  public ContainerCheckpointRequestProto getProto() {
+  public ContainerRestoreRequestProto getProto() {
     mergeLocalToProto();
     this.proto = viaProto ? proto : builder.build();
     this.viaProto = true;
@@ -37,7 +38,7 @@ public class ContainerCheckpointRequestPBImpl
   
   @Override
   public long getId() {
-    ContainerCheckpointRequestProtoOrBuilder p = viaProto ? proto : builder;
+    ContainerRestoreRequestProtoOrBuilder p = viaProto ? proto : builder;
     return p.getId();
   }
   
@@ -49,7 +50,7 @@ public class ContainerCheckpointRequestPBImpl
   
   @Override
   public ContainerId getContainerId() {
-    ContainerCheckpointRequestProtoOrBuilder p = viaProto ? proto : builder;
+    ContainerRestoreRequestProtoOrBuilder p = viaProto ? proto : builder;
     if (this.containerId == null && p.hasContainerId()) {
       this.containerId = convertFromProtoFormat(p.getContainerId());
     }
@@ -64,13 +65,32 @@ public class ContainerCheckpointRequestPBImpl
     }
     this.containerId = containerId;
   }
-  
+
+  @Override
+  public ContainerId getSourceContainerId() {
+    ContainerRestoreRequestProtoOrBuilder p = viaProto ? proto : builder;
+    if (this.sourceContainerId == null && p.hasSourceContainerId()) {
+      this.sourceContainerId = convertFromProtoFormat(
+          p.getSourceContainerId());
+    }
+    return this.sourceContainerId;
+  }
+
+  @Override
+  public void setSourceContainerId(ContainerId sourceContainerId) {
+    maybeInitBuilder();
+    if (sourceContainerId == null) {
+      builder.clearSourceContainerId();
+    }
+    this.sourceContainerId = sourceContainerId;
+  }
+
   @Override
   public String getAddress() {
-    ContainerCheckpointRequestProtoOrBuilder p = viaProto ? proto : builder;
+    ContainerRestoreRequestProtoOrBuilder p = viaProto ? proto : builder;
     return p.getAddress();
   }
-  
+
   @Override
   public void setAddress(String address) {
     maybeInitBuilder();
@@ -79,7 +99,7 @@ public class ContainerCheckpointRequestPBImpl
 
   @Override
   public int getPort() {
-    ContainerCheckpointRequestProtoOrBuilder p = viaProto ? proto : builder;
+    ContainerRestoreRequestProtoOrBuilder p = viaProto ? proto : builder;
     return p.getPort();
   }
 
@@ -113,6 +133,10 @@ public class ContainerCheckpointRequestPBImpl
     if (this.containerId != null) {
       this.builder.setContainerId(convertToProtoFormat(containerId));
     }
+    if (this.sourceContainerId != null) {
+      this.builder.setSourceContainerId(convertToProtoFormat(
+          sourceContainerId));
+    }
   }
   
   private void mergeLocalToProto() {
@@ -126,11 +150,11 @@ public class ContainerCheckpointRequestPBImpl
 
   private void maybeInitBuilder() {
     if (viaProto || builder == null) {
-      this.builder = ContainerCheckpointRequestProto.newBuilder(proto);
+      this.builder = ContainerRestoreRequestProto.newBuilder(proto);
     }
     this.viaProto = false;
   }
-  
+
   private ContainerIdPBImpl convertFromProtoFormat(ContainerIdProto p) {
     return new ContainerIdPBImpl(p);
   }

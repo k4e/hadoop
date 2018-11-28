@@ -43,6 +43,7 @@ import org.apache.hadoop.net.Node;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.Container;
@@ -184,6 +185,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       new HashMap<>();
   
   private final List<ContainerCheckpointRequest> containerCheckpoints =
+      new ArrayList<>();
+  
+  private final List<ContainerRestoreRequest> containerRestores = 
       new ArrayList<>();
 
   private NodeHeartbeatResponse latestNodeHeartBeatResponse = recordFactory
@@ -617,12 +621,14 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
           new ArrayList<ContainerId>(this.containersToBeRemovedFromNM));
       response.addAllContainersToSignal(this.containersToSignal);
       response.addAllContainerCheckpoints(this.containerCheckpoints);
+      response.addAllContainerRestores(this.containerRestores);
       this.completedContainers.removeAll(this.containersToBeRemovedFromNM);
       this.containersToClean.clear();
       this.finishedApplications.clear();
       this.containersToSignal.clear();
       this.containersToBeRemovedFromNM.clear();
       this.containerCheckpoints.clear();
+      this.containerRestores.clear();
 
       response.addAllContainersToUpdate(toBeUpdatedContainers.values());
       toBeUpdatedContainers.clear();

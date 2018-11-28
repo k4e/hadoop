@@ -1,28 +1,28 @@
 package org.apache.hadoop.yarn.api.protocolrecords.impl.pb;
 
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
-import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointResponseProto;
-import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointResponseProtoOrBuilder;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreResponseProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreResponseProtoOrBuilder;
 
 import com.google.protobuf.TextFormat;
 
-public class ContainerCheckpointResponsePBImpl
-    extends ContainerCheckpointResponse {
-  ContainerCheckpointResponseProto proto;
-  ContainerCheckpointResponseProto.Builder builder = null;
+public class ContainerRestoreResponsePBImpl extends ContainerRestoreResponse {
+
+  ContainerRestoreResponseProto proto = ContainerRestoreResponseProto
+      .getDefaultInstance();
+  ContainerRestoreResponseProto.Builder builder = null;
   boolean viaProto = false;
   
-  public ContainerCheckpointResponsePBImpl() {
-    builder = ContainerCheckpointResponseProto.newBuilder();
+  public ContainerRestoreResponsePBImpl() {
+    builder = ContainerRestoreResponseProto.newBuilder();
   }
   
-  public ContainerCheckpointResponsePBImpl(
-      ContainerCheckpointResponseProto proto) {
+  public ContainerRestoreResponsePBImpl(ContainerRestoreResponseProto proto) {
     this.proto = proto;
     this.viaProto = true;
   }
   
-  public ContainerCheckpointResponseProto getProto() {
+  public ContainerRestoreResponseProto getProto() {
     this.proto = viaProto ? proto : builder.build();
     this.viaProto = true;
     return proto;
@@ -30,10 +30,10 @@ public class ContainerCheckpointResponsePBImpl
   
   @Override
   public long getId() {
-    ContainerCheckpointResponseProtoOrBuilder p = viaProto ? proto : builder;
+    ContainerRestoreResponseProtoOrBuilder p = viaProto ? proto : builder;
     return p.getId();
   }
-  
+
   @Override
   public void setId(long id) {
     maybeInitBuilder();
@@ -42,7 +42,7 @@ public class ContainerCheckpointResponsePBImpl
 
   @Override
   public int getStatus() {
-    ContainerCheckpointResponseProtoOrBuilder p = viaProto ? proto : builder;
+    ContainerRestoreResponseProtoOrBuilder p = viaProto ? proto : builder;
     return p.getStatus();
   }
 
@@ -74,7 +74,7 @@ public class ContainerCheckpointResponsePBImpl
   
   private void maybeInitBuilder() {
     if (viaProto || builder == null) {
-      this.builder = ContainerCheckpointResponseProto.newBuilder(proto);
+      this.builder = ContainerRestoreResponseProto.newBuilder(proto);
     }
     this.viaProto = false;
   }

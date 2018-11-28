@@ -8,15 +8,17 @@ import org.apache.hadoop.yarn.util.Records;
 
 @Public
 @Evolving
-public abstract class ContainerCheckpointRequest {
+public abstract class ContainerRestoreRequest {
 
   @Public
   @Unstable
-  public static ContainerCheckpointRequest newInstance(long id,
-      ContainerId containerId, String address, int port) {
-    ContainerCheckpointRequest req = Records.newRecord(
-        ContainerCheckpointRequest.class);
+  public static ContainerRestoreRequest newInstance(long id,
+      ContainerId containerId, ContainerId sourceContainerId,
+      String address, int port) {
+    ContainerRestoreRequest req =
+        Records.newRecord(ContainerRestoreRequest.class);
     req.setContainerId(containerId);
+    req.setSourceContainerId(sourceContainerId);
     req.setAddress(address);
     req.setPort(port);
     return req;
@@ -37,6 +39,14 @@ public abstract class ContainerCheckpointRequest {
   @Public
   @Unstable
   public abstract void setContainerId(ContainerId containerId);
+
+  @Public
+  @Unstable
+  public abstract ContainerId getSourceContainerId();
+  
+  @Public
+  @Unstable
+  public abstract void setSourceContainerId(ContainerId sourceContainerId);
   
   @Public
   @Unstable

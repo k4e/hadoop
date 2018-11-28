@@ -32,8 +32,10 @@ import com.google.protobuf.ByteString;
 
 import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerRestoreRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerRequestPBImpl;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -54,6 +56,7 @@ import org.apache.hadoop.yarn.proto.YarnProtos.ResourceProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.AppCollectorDataProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.ContainerQueuingLimitProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.SignalContainerRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.MasterKeyProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.NodeActionProto;
@@ -91,6 +94,7 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
   private List<Container> containersToDecrease = null;
   private List<SignalContainerRequest> containersToSignal = null;
   private List<ContainerCheckpointRequest> containerCheckpoints = null;
+  private List<ContainerRestoreRequest> containerRestores = null;
 
   private static final Interner<ByteString> BYTE_STRING_INTERNER =
       Interners.newWeakInterner();
@@ -870,6 +874,22 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     this.containerCheckpoints.addAll(containerCheckpoints);
   }
   
+  @Override
+  public List<ContainerRestoreRequest> getContainerRestoresList() {
+    initContainerRestores();
+    return containerRestores;
+  }
+  
+  @Override
+  public void addAllContainerRestores(
+      List<ContainerRestoreRequest> containerRestores) {
+    if (containerRestores == null) {
+      return;
+    }
+    initContainerRestores();
+    this.containerRestores.addAll(containerRestores);
+  }
+  
   private void initContainerCheckpoints() {
     if (containerCheckpoints != null) {
       return;
@@ -909,6 +929,45 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     };
     builder.addAllContainerCheckpoints(iterable);
   }
+  
+  private void initContainerRestores() {
+    if (containerRestores != null) {
+      return;
+    }
+    NodeHeartbeatResponseProtoOrBuilder p = viaProto ? proto : builder;
+    List<ContainerRestoreRequestProto> pList =
+        p.getContainerRestoresList();
+    this.containerRestores = new ArrayList<>();
+    for (ContainerRestoreRequestProto c : pList) {
+      this.containerRestores.add(convertFromProtoFormat(c));
+    }
+  }
+  
+  private void addContainerRestoresToProto() {
+    maybeInitBuilder();
+    builder.clearContainerRestores();
+    if (containerCheckpoints == null) {
+      return;
+    }
+    Iterable<ContainerRestoreRequestProto> iterable
+        = new Iterable<ContainerRestoreRequestProto>() {
+      @Override
+      public Iterator<ContainerRestoreRequestProto> iterator() {
+        return new Iterator<ContainerRestoreRequestProto>() {
+          Iterator<ContainerRestoreRequest> itr = containerRestores.iterator();
+          @Override
+          public boolean hasNext() {
+            return itr.hasNext();
+          }
+          @Override
+          public ContainerRestoreRequestProto next() {
+            return convertToProtoFormat(itr.next());
+          }
+        };
+      }
+    };
+    builder.addAllContainerRestores(iterable);
+  }
 
   private ContainerQueuingLimit convertFromProtoFormat(
       ContainerQueuingLimitProto p) {
@@ -947,5 +1006,16 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
       ContainerCheckpointRequestProto p) {
     return new ContainerCheckpointRequestPBImpl(p);
   }
+  
+  private ContainerRestoreRequestProto convertToProtoFormat(
+      ContainerRestoreRequest t) {
+    return ((ContainerRestoreRequestPBImpl)t).getProto();
+  }
+  
+  private ContainerRestoreRequest convertFromProtoFormat(
+      ContainerRestoreRequestProto p) {
+    return new ContainerRestoreRequestPBImpl(p);
+  }
+  
 }
 

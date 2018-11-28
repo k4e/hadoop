@@ -217,7 +217,8 @@ public class ContainersLauncher extends AbstractService
             (CheckpointContainersLauncherEvent)event;
         ContainerLaunch checkpointContainerLaunch = running.get(containerId);
         if (checkpointContainerLaunch == null) {
-          LOG.info("Container " + containerId + " not running, checkpointing not performed.");
+          LOG.info("Container " + containerId +
+              " not running, checkpointing not performed.");
           return;
         }
         String checkpointAddress = checkpointEvent.getAddress();

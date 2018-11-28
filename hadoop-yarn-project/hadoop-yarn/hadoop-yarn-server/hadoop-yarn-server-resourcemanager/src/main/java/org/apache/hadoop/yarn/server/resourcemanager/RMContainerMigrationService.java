@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
@@ -40,6 +41,7 @@ public class RMContainerMigrationService extends AbstractService {
   private static final long BASE_ALLOCATION_ID = Long.MAX_VALUE / 2 + RMContainerMigrationService.class.hashCode();
   
   private final RMContext rmContext;
+  private final AtomicLong countMigration;
   private final Map<ApplicationAttemptId, Long> migrationAttempts;
   private final Set<Pair<ApplicationAttemptId, Long> > waitingContainers;
   private final ConcurrentHashMap<Pair<ApplicationAttemptId, Long>, ContainerId> allocatedContainers;
@@ -47,6 +49,7 @@ public class RMContainerMigrationService extends AbstractService {
   public RMContainerMigrationService(RMContext rmContext) {
     super(RMContainerMigrationService.class.getName());
     this.rmContext = rmContext;
+    this.countMigration = new AtomicLong();
     this.migrationAttempts = new HashMap<>();
     this.waitingContainers = Collections.synchronizedSet(new HashSet<>());
     this.allocatedContainers = new ConcurrentHashMap<>();
@@ -54,6 +57,7 @@ public class RMContainerMigrationService extends AbstractService {
 
   void move(RMContainer rmSourceContainer, RMNode rmSourceNode,
       RMNode rmDestinationNode) throws YarnException {
+    long migrationId = this.countMigration.getAndIncrement();
     ApplicationAttemptId applicationAttemptId =
         rmSourceContainer.getApplicationAttemptId();
     Container sourceContainer = rmSourceContainer.getContainer();
@@ -66,7 +70,7 @@ public class RMContainerMigrationService extends AbstractService {
     }
     long allocationId = BASE_ALLOCATION_ID + migrationAttempt;
     
-    // TODO 移行先のコンテナを確保する
+    // 移行先のコンテナをアロケートする
     String destinationHost = rmDestinationNode.getHostName();
     String destinationRack = rmDestinationNode.getRackName();
     Priority priority = sourceContainer.getPriority();
@@ -111,14 +115,14 @@ public class RMContainerMigrationService extends AbstractService {
       LOG.error(description);
       throw new YarnException(description);
     }
+    // TODO 指定したノードでアロケートできなかった場合には破棄する
     LOG.info(rmDestinationContainer);
     // TODO リストア リクエストを送信する
-    
-    // TODO チェックポイント リクエストを送信する
+    // チェックポイント リクエストを送信する
     int destinationPort = PORT;
     NodeId sourceNodeId = rmSourceNode.getNodeID();
     ContainerCheckpointRequest checkpointRequest =
-        ContainerCheckpointRequest.newInstance(sourceContainerId,
+        ContainerCheckpointRequest.newInstance(migrationId, sourceContainerId,
             destinationHost, destinationPort);
     this.rmContext.getDispatcher().getEventHandler().handle(
         new RMNodeContainerCheckpointEvent(sourceNodeId, checkpointRequest));
@@ -126,17 +130,19 @@ public class RMContainerMigrationService extends AbstractService {
     
   }
   
-  void allocateHook(ApplicationAttemptId appAttemptId, Allocation allocation) {
-    if (!this.waitingContainers.isEmpty()) {
-      for (Container container : allocation.getContainers()) {
-        long allocReqId = container.getAllocationRequestId();
-        Pair<ApplicationAttemptId, Long> key = Pair.of(
-            appAttemptId, Long.valueOf(allocReqId));
-        if (allocReqId != -1) {
-          if(this.waitingContainers.remove(key)) {
-            ContainerId containerId = container.getId();
-            this.allocatedContainers.put(key, containerId);
-          }
+  public boolean isWaitingAllocation() {
+    return !this.waitingContainers.isEmpty();
+  }
+  
+  public void notifyAllocation(ApplicationAttemptId appAttemptId, Allocation allocation) {
+    for (Container container : allocation.getContainers()) {
+      long allocReqId = container.getAllocationRequestId();
+      Pair<ApplicationAttemptId, Long> key = Pair.of(
+          appAttemptId, Long.valueOf(allocReqId));
+      if (allocReqId != -1) {
+        if(this.waitingContainers.remove(key)) {
+          ContainerId containerId = container.getId();
+          this.allocatedContainers.put(key, containerId);
         }
       }
     }
