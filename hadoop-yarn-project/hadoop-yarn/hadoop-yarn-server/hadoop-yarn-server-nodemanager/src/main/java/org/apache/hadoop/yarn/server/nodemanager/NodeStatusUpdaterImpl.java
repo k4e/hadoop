@@ -49,6 +49,7 @@ import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.VersionUtil;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -1165,9 +1166,16 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             
             List<ContainerCheckpointRequest> containerCheckpoints = response
                 .getContainerCheckpointsList();
-            if(!containerCheckpoints.isEmpty()) {
+            if (!containerCheckpoints.isEmpty()) {
               dispatcher.getEventHandler().handle(
                   new CMgrContainerCheckpointEvent(containerCheckpoints));
+            }
+            
+            List<ContainerRestoreRequest> containerRestores = response
+                .getContainerRestoresList();
+            if (!containerRestores.isEmpty()) {
+              dispatcher.getEventHandler().handle(
+                  new CMgrContainerRestoreEvent(containerRestores));
             }
           }
           // Handling node resource update case.

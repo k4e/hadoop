@@ -251,6 +251,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       .addTransition(NodeState.RUNNING, NodeState.RUNNING,
           RMNodeEventType.CHECKPOINT_CONTAINER,
           new ContainerCheckpointTransition())
+      .addTransition(NodeState.RUNNING, NodeState.RUNNING,
+          RMNodeEventType.RESTORE_CONTAINER,
+          new ContainerRestoreTransition())
 
       //Transitions from REBOOTED state
       .addTransition(NodeState.REBOOTED, NodeState.REBOOTED,
@@ -1311,8 +1314,18 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     
     @Override
     public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
-      rmNode.containerCheckpoints.add(((
-          RMNodeContainerCheckpointEvent)event).getCheckpointRequest());
+      rmNode.containerCheckpoints.add(
+          ((RMNodeContainerCheckpointEvent)event).getCheckpointRequest());
+    }
+  }
+  
+  public static class ContainerRestoreTransition implements
+      SingleArcTransition<RMNodeImpl, RMNodeEvent> {
+    
+    @Override
+    public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
+      rmNode.containerRestores.add(
+          ((RMNodeContainerRestoreEvent)event).getRestoreRequest());
     }
   }
 

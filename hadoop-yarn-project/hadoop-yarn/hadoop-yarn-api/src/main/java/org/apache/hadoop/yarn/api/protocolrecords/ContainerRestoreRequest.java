@@ -4,6 +4,7 @@ import org.apache.hadoop.classification.InterfaceAudience.Public;
 import org.apache.hadoop.classification.InterfaceStability.Evolving;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.Token;
 import org.apache.hadoop.yarn.util.Records;
 
 @Public
@@ -13,11 +14,12 @@ public abstract class ContainerRestoreRequest {
   @Public
   @Unstable
   public static ContainerRestoreRequest newInstance(long id,
-      ContainerId containerId, ContainerId sourceContainerId,
-      String address, int port) {
+      ContainerId containerId, Token containerToken,
+      ContainerId sourceContainerId, String address, int port) {
     ContainerRestoreRequest req =
         Records.newRecord(ContainerRestoreRequest.class);
     req.setContainerId(containerId);
+    req.setContainerToken(containerToken);
     req.setSourceContainerId(sourceContainerId);
     req.setAddress(address);
     req.setPort(port);
@@ -40,6 +42,14 @@ public abstract class ContainerRestoreRequest {
   @Unstable
   public abstract void setContainerId(ContainerId containerId);
 
+  @Public
+  @Unstable
+  public abstract Token getContainerToken();
+  
+  @Public
+  @Unstable
+  public abstract void setContainerToken(Token containerToken);
+  
   @Public
   @Unstable
   public abstract ContainerId getSourceContainerId();

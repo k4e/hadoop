@@ -61,6 +61,7 @@ import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
@@ -86,6 +87,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerExitEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerKillEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerState;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCRCheckpointEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.DockerLinuxContainerRuntime;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ResourceLocalizationService;
@@ -1892,9 +1894,8 @@ public class ContainerLaunch implements Callable<Integer> {
     }
   }
   
-  public void checkpointContainer(String address, int port)
+  public void checkpointContainer(ContainerCheckpointRequest request)
       throws IOException {
-    // TODO: チェックポイントの実装
     ContainerId containerId = container.getContainerTokenIdentifier()
         .getContainerID();
     String containerIdStr = containerId.toString();
@@ -1915,18 +1916,11 @@ public class ContainerLaunch implements Callable<Integer> {
         processId = getContainerPid(pidFilePath);
       }
       if (processId != null) {
-        // ここで CRIU dump を実行
         if (LOG.isDebugEnabled()) {
           LOG.debug(String.format("Run criu dump"));
         }
-        boolean result = true;
-        String diagnostics = String.format(
-            "Checkpointed process %s as user %s for container %s, result = %s",
-                processId, user, containerIdStr,
-                (result ? "success" : "failure"));
-        LOG.info(diagnostics);
-        dispatcher.getEventHandler().handle(
-            new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
+        dispatcher.getEventHandler().handle(new ContainerCRCheckpointEvent(
+            container, processId, request));
       }
     } catch (Exception e) {
       String msg = String.format(

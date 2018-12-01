@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
@@ -212,7 +213,6 @@ public class ContainersLauncher extends AbstractService
         }
         break;
       case CHECKPOINT_CONTAINER:
-        LOG.info("ContainersLancher/handle()/CHECKPOINT_CONTAINER");
         CheckpointContainersLauncherEvent checkpointEvent =
             (CheckpointContainersLauncherEvent)event;
         ContainerLaunch checkpointContainerLaunch = running.get(containerId);
@@ -221,11 +221,12 @@ public class ContainersLauncher extends AbstractService
               " not running, checkpointing not performed.");
           return;
         }
-        String checkpointAddress = checkpointEvent.getAddress();
-        int checkpointPort = checkpointEvent.getPort();
+        ContainerCheckpointRequest checkpointRequest =
+            checkpointEvent.getCheckpointRequest();
+        String checkpointAddress = checkpointRequest.getAddress();
+        int checkpointPort = checkpointRequest.getPort();
         try {
-          checkpointContainerLaunch.checkpointContainer(checkpointAddress,
-              checkpointPort);
+          checkpointContainerLaunch.checkpointContainer(checkpointRequest);
         } catch (IOException e) {
           LOG.info(String.format("Got exception while checkpointing container (containerId=%s, address=%s, port=%d)",
               containerId, checkpointAddress, checkpointPort));

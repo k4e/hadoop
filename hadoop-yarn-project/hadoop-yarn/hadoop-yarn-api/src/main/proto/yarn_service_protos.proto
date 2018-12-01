@@ -330,9 +330,10 @@ message ContainerCheckpointResponseProto {
 message ContainerRestoreRequestProto {
   required int64 id = 1;
   required ContainerIdProto container_id = 2;
-  required ContainerIdProto source_container_id = 3;
-  required string address = 4;
-  required int32 port = 5;
+  required hadoop.common.TokenProto container_token = 3;
+  required ContainerIdProto source_container_id = 4;
+  required string address = 5;
+  required int32 port = 6;
 }
 
 message ContainerRestoreResponseProto {

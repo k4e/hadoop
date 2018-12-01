@@ -1,10 +1,12 @@
 package org.apache.hadoop.yarn.api.protocolrecords.impl.pb;
 
+import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.Token;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerIdPBImpl;
+import org.apache.hadoop.yarn.api.records.impl.pb.TokenPBImpl;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerIdProto;
-import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreRequestProtoOrBuilder;
 
@@ -18,6 +20,7 @@ public class ContainerRestoreRequestPBImpl extends ContainerRestoreRequest {
   boolean viaProto = false;
   
   private ContainerId containerId;
+  private Token containerToken;
   private ContainerId sourceContainerId;
   
   public ContainerRestoreRequestPBImpl() {
@@ -64,6 +67,28 @@ public class ContainerRestoreRequestPBImpl extends ContainerRestoreRequest {
       builder.clearContainerId();
     }
     this.containerId = containerId;
+  }
+
+  @Override
+  public Token getContainerToken() {
+    ContainerRestoreRequestProtoOrBuilder p = viaProto ? proto : builder;
+    if (this.containerToken != null) {
+      return this.containerToken;
+    }
+    if (!p.hasContainerToken()) {
+      return null;
+    }
+    this.containerToken = convertFromProtoFormat(p.getContainerToken());
+    return this.containerToken;
+  }
+
+  @Override
+  public void setContainerToken(Token containerToken) {
+    maybeInitBuilder();
+    if(containerToken == null) {
+      builder.clearContainerToken();
+    }
+    this.containerToken = containerToken;
   }
 
   @Override
@@ -133,6 +158,9 @@ public class ContainerRestoreRequestPBImpl extends ContainerRestoreRequest {
     if (this.containerId != null) {
       this.builder.setContainerId(convertToProtoFormat(containerId));
     }
+    if (this.containerToken != null) {
+      this.builder.setContainerToken(convertToProtoFormat(containerToken));
+    }
     if (this.sourceContainerId != null) {
       this.builder.setSourceContainerId(convertToProtoFormat(
           sourceContainerId));
@@ -161,5 +189,13 @@ public class ContainerRestoreRequestPBImpl extends ContainerRestoreRequest {
   
   private ContainerIdProto convertToProtoFormat(ContainerId t) {
     return ((ContainerIdPBImpl)t).getProto();
+  }
+  
+  private TokenPBImpl convertFromProtoFormat(TokenProto containerProto) {
+    return new TokenPBImpl(containerProto);
+  }
+
+  private TokenProto convertToProtoFormat(Token container) {
+    return ((TokenPBImpl)container).getProto();
   }
 }

@@ -1,25 +1,20 @@
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher;
 
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 
 public class CheckpointContainersLauncherEvent extends ContainersLauncherEvent
 {
 
-  private final String address;
-  private final int port;
+  private final ContainerCheckpointRequest request;
   
-  public CheckpointContainersLauncherEvent(Container container, String address,
-      int port) {
+  public CheckpointContainersLauncherEvent(Container container,
+      ContainerCheckpointRequest request) {
     super(container, ContainersLauncherEventType.CHECKPOINT_CONTAINER);
-    this.address = address;
-    this.port = port;
+    this.request = request;
   }
   
-  public String getAddress() {
-    return address;
-  }
-  
-  public int getPort() {
-    return port;
+  public ContainerCheckpointRequest getCheckpointRequest() {
+    return request;
   }
 }

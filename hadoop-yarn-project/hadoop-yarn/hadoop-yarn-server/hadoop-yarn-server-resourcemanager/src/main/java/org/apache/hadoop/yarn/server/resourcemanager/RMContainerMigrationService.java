@@ -17,13 +17,17 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.ExecutionType;
+import org.apache.hadoop.yarn.api.records.ExecutionTypeRequest;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.Token;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
@@ -75,15 +79,22 @@ public class RMContainerMigrationService extends AbstractService {
     String destinationRack = rmDestinationNode.getRackName();
     Priority priority = sourceContainer.getPriority();
     Resource capability = sourceContainer.getResource();
+    ExecutionType execType = sourceContainer.getExecutionType();
     ResourceRequest nodeLevelRequest = ResourceRequest.newInstance(
         priority, destinationHost, capability, 1, false);
     nodeLevelRequest.setAllocationRequestId(allocationId);
+    nodeLevelRequest.setExecutionTypeRequest(
+        ExecutionTypeRequest.newInstance(execType, true));
     ResourceRequest rackLevelRequest = ResourceRequest.newInstance(
         priority, destinationRack, capability, 1, false);
     rackLevelRequest.setAllocationRequestId(allocationId);
+    rackLevelRequest.setExecutionTypeRequest(
+        ExecutionTypeRequest.newInstance(execType, true));
     ResourceRequest anyLevelRequest = ResourceRequest.newInstance(
         priority, ResourceRequest.ANY, capability, 1, false);
     anyLevelRequest.setAllocationRequestId(allocationId);
+    anyLevelRequest.setExecutionTypeRequest(
+        ExecutionTypeRequest.newInstance(execType, true));
     List<ResourceRequest> ask = Arrays.asList(
         nodeLevelRequest, rackLevelRequest, anyLevelRequest);
     LOG.info(ask);
@@ -117,7 +128,6 @@ public class RMContainerMigrationService extends AbstractService {
     }
     // TODO 指定したノードでアロケートできなかった場合には破棄する
     LOG.info(rmDestinationContainer);
-    // TODO リストア リクエストを送信する
     // チェックポイント リクエストを送信する
     int destinationPort = PORT;
     NodeId sourceNodeId = rmSourceNode.getNodeID();
@@ -126,6 +136,16 @@ public class RMContainerMigrationService extends AbstractService {
             destinationHost, destinationPort);
     this.rmContext.getDispatcher().getEventHandler().handle(
         new RMNodeContainerCheckpointEvent(sourceNodeId, checkpointRequest));
+    // TODO リストア リクエストを送信する
+    ContainerId destinationContainerId = rmDestinationContainer
+        .getContainerId();
+    Token destinationContainerToken = rmDestinationContainer.getContainer()
+        .getContainerToken();
+    ContainerRestoreRequest restoreRequest = ContainerRestoreRequest
+        .newInstance(migrationId, destinationContainerId,
+            destinationContainerToken, sourceContainerId, destinationHost,
+            destinationPort);
+    
     // TODO 移行元のコンテナを終了する
     
   }
