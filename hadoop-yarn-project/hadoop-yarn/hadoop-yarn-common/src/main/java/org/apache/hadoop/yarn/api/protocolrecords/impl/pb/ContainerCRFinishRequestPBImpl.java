@@ -114,8 +114,8 @@ public class ContainerCRFinishRequestPBImpl extends ContainerCRFinishRequest {
 
   @Override
   public void setCompleting(boolean completing) {
-    // TODO Auto-generated method stub
-
+    maybeInitBuilder();
+    this.builder.setCompleting(completing);
   }
   
   @Override
