@@ -27,6 +27,7 @@ import java.util.Map;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.protocolrecords.ApplicationsRequestScope;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRType;
 import org.apache.hadoop.yarn.api.protocolrecords.ResourceTypes;
 import org.apache.hadoop.yarn.api.records.AMCommand;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
@@ -88,6 +89,7 @@ import org.apache.hadoop.yarn.proto.YarnProtos.ExecutionTypeRequestProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ResourceTypesProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.NodeUpdateTypeProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCRTypeProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerUpdateTypeProto;
 import org.apache.hadoop.yarn.server.api.ContainerType;
 
@@ -549,6 +551,14 @@ public class ProtoUtils {
   public static TimedPlacementConstraint.DelayUnit convertFromProtoFormat(
           TimedPlacementConstraintProto.DelayUnit u) {
     return TimedPlacementConstraint.DelayUnit.valueOf(u.name());
+  }
+  
+  public static ContainerCRTypeProto convertToProtoFormat(ContainerCRType t) {
+    return ContainerCRTypeProto.valueOf(t.name());
+  }
+  
+  public static ContainerCRType convertFromProtoFormat(ContainerCRTypeProto p) {
+    return ContainerCRType.valueOf(p.name());
   }
 }
 

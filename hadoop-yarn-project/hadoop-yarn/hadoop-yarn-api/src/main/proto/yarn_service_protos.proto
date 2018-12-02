@@ -341,14 +341,14 @@ message ContainerRestoreResponseProto {
   required int32 status = 2;
 }
 
-enum ContainerCRProto {
+enum ContainerCRTypeProto {
   CHECKPOINT = 1;
   RESTORE = 2;
 }
 
-message ContainerCRPPostRequestProto {
+message ContainerCRFinishRequestProto {
   required int64 id = 1;
-  required ContainerCRProto container_cr = 2;
+  required ContainerCRTypeProto type = 2;
   required ContainerIdProto source_container_id = 3;
   required ContainerIdProto destination_container_id = 4;
   required bool completing = 5;

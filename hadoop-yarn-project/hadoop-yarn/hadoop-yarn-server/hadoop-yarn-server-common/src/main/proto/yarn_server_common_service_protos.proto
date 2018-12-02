@@ -126,6 +126,7 @@ message NodeHeartbeatResponseProto {
   repeated ContainerProto containers_to_update = 17;
   repeated ContainerCheckpointRequestProto container_checkpoints = 18;
   repeated ContainerRestoreRequestProto container_restores = 19;
+  repeated ContainerCRFinishRequestProto container_cr_finish = 20;
 }
 
 message ContainerQueuingLimitProto {
