@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
@@ -85,4 +87,14 @@ public abstract class NodeHeartbeatRequest {
 
   public abstract void setRegisteringCollectors(Map<ApplicationId,
       AppCollectorData> appCollectorsMap);
+  
+  public abstract List<ContainerCheckpointResponse> getContainerCheckpoints();
+  
+  public abstract void setContainerCheckpoints(
+      List<ContainerCheckpointResponse> responses);
+  
+  public abstract List<ContainerRestoreResponse> getContainerRestores();
+  
+  public abstract void setContainerRestores(
+      List<ContainerRestoreResponse> responses);
 }

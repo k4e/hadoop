@@ -28,6 +28,11 @@ import java.util.Set;
 
 import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointResponsePBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerRestoreResponsePBImpl;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.api.records.Token;
@@ -42,8 +47,13 @@ import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.AppCollectorDa
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.LogAggregationReportProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.NodeHeartbeatRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.NodeHeartbeatRequestProtoOrBuilder;
+import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.NodeHeartbeatResponseProtoOrBuilder;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.NodeLabelsProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.NodeLabelsProto.Builder;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointResponseProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreResponseProto;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatRequest;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
@@ -61,6 +71,8 @@ public class NodeHeartbeatRequestPBImpl extends NodeHeartbeatRequest {
   private MasterKey lastKnownNMTokenMasterKey = null;
   private Set<NodeLabel> labels = null;
   private List<LogAggregationReport> logAggregationReportsForApps = null;
+  private List<ContainerCheckpointResponse> containerCheckpoints = null;
+  private List<ContainerRestoreResponse> containerRestores = null;
 
   private Map<ApplicationId, AppCollectorData> registeringCollectors = null;
 
@@ -120,6 +132,12 @@ public class NodeHeartbeatRequestPBImpl extends NodeHeartbeatRequest {
     }
     if (this.registeringCollectors != null) {
       addRegisteringCollectorsToProto();
+    }
+    if (this.containerCheckpoints != null) {
+      addContainerCheckpointsToProto();
+    }
+    if (this.containerRestores != null) {
+      addContainerRestoresToProto();
     }
   }
 
@@ -402,5 +420,126 @@ public class NodeHeartbeatRequestPBImpl extends NodeHeartbeatRequest {
       builder.clearLogAggregationReportsForApps();
     }
     this.logAggregationReportsForApps = logAggregationStatusForApps;
+  }
+
+  @Override
+  public List<ContainerCheckpointResponse> getContainerCheckpoints() {
+    initContainerCheckpoints();
+    return this.containerCheckpoints;
+  }
+
+  @Override
+  public void setContainerCheckpoints(List<ContainerCheckpointResponse> responses) {
+    if (responses == null) {
+      builder.clearContainerCheckpoints();
+    }
+    this.containerCheckpoints = responses;
+  }
+
+  @Override
+  public List<ContainerRestoreResponse> getContainerRestores() {
+    initContainerRestores();
+    return this.containerRestores;
+  }
+
+  @Override
+  public void setContainerRestores(List<ContainerRestoreResponse> responses) {
+    if (responses == null) {
+      builder.clearContainerRestores();
+    }
+    this.containerRestores = responses;
+  }
+  
+  private void initContainerCheckpoints() {
+    if (containerCheckpoints != null) {
+      return;
+    }
+    NodeHeartbeatRequestProtoOrBuilder p = viaProto ? proto : builder;
+    List<ContainerCheckpointResponseProto> pList =
+        p.getContainerCheckpointsList();
+    this.containerCheckpoints = new ArrayList<>();
+    for (ContainerCheckpointResponseProto c : pList) {
+      this.containerCheckpoints.add(convertFromProtoFormat(c));
+    }
+  }
+  
+  private void addContainerCheckpointsToProto() {
+    maybeInitBuilder();
+    builder.clearContainerCheckpoints();
+    if (containerCheckpoints == null) {
+      return;
+    }
+    Iterable<ContainerCheckpointResponseProto> iterable
+        = new Iterable<ContainerCheckpointResponseProto>() {
+      @Override
+      public Iterator<ContainerCheckpointResponseProto> iterator() {
+        return new Iterator<ContainerCheckpointResponseProto>() {
+          Iterator<ContainerCheckpointResponse> itr = containerCheckpoints.iterator();
+          @Override
+          public boolean hasNext() {
+            return itr.hasNext();
+          }
+          @Override
+          public ContainerCheckpointResponseProto next() {
+            return convertToProtoFormat(itr.next());
+          }
+        };
+      }
+    };
+    builder.addAllContainerCheckpoints(iterable);
+  }
+  
+  private void initContainerRestores() {
+    if (containerRestores != null) {
+      return;
+    }
+    NodeHeartbeatRequestProtoOrBuilder p = viaProto ? proto : builder;
+    List<ContainerRestoreResponseProto> pList = p.getContainerRestoresList();
+    this.containerRestores = new ArrayList<>();
+    for (ContainerRestoreResponseProto c : pList) {
+      this.containerRestores.add(convertFromProtoFormat(c));
+    }
+  }
+  
+  private void addContainerRestoresToProto() {
+    maybeInitBuilder();
+    builder.clearContainerRestores();
+    if (containerRestores == null) {
+      return;
+    }
+    Iterable<ContainerRestoreResponseProto> iterable
+        = new Iterable<ContainerRestoreResponseProto>() {
+      @Override
+      public Iterator<ContainerRestoreResponseProto> iterator() {
+        return new Iterator<ContainerRestoreResponseProto>() {
+          Iterator<ContainerRestoreResponse> itr = containerRestores.iterator();
+          @Override
+          public boolean hasNext() {
+            return itr.hasNext();
+          }
+          @Override
+          public ContainerRestoreResponseProto next() {
+            return convertToProtoFormat(itr.next());
+          }
+        };
+      }
+    };
+    builder.addAllContainerRestores(iterable);
+  }
+  
+  private ContainerCheckpointResponsePBImpl convertFromProtoFormat(ContainerCheckpointResponseProto p) {
+    return new ContainerCheckpointResponsePBImpl(p);
+  }
+  
+  private ContainerCheckpointResponseProto convertToProtoFormat(ContainerCheckpointResponse t) {
+    return ((ContainerCheckpointResponsePBImpl)t).getProto();
+  }
+  
+  private ContainerRestoreResponsePBImpl convertFromProtoFormat(ContainerRestoreResponseProto p) {
+    return new ContainerRestoreResponsePBImpl(p);
+  }
+  
+  private ContainerRestoreResponseProto convertToProtoFormat(ContainerRestoreResponse t) {
+    return ((ContainerRestoreResponsePBImpl)t).getProto();
   }
 }  

@@ -49,7 +49,9 @@ import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.VersionUtil;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -87,6 +89,7 @@ import org.apache.hadoop.yarn.server.nodemanager.NodeManager.NMContext;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.ApplicationState;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCR;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor.ContainersMonitor;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
 import org.apache.hadoop.yarn.server.nodemanager.nodelabels.NodeLabelsProvider;
@@ -1083,6 +1086,14 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
                   nodeLabelsForHeartbeat,
                   NodeStatusUpdaterImpl.this.context
                       .getRegisteringCollectors());
+          ContainerCR containerCR = NodeStatusUpdaterImpl.this.context
+              .getContainerManager().getContainerCR();
+          List<ContainerCheckpointResponse> checkpointResponses = containerCR
+              .getLastCheckpointResponses();
+          request.setContainerCheckpoints(checkpointResponses);
+          List<ContainerRestoreResponse> restoreResponses = containerCR
+              .getLastRestoreResponses();
+          request.setContainerRestores(restoreResponses);
 
           if (logAggregationEnabled) {
             // pull log aggregation status for application running in this NM

@@ -8,6 +8,9 @@ import org.apache.hadoop.classification.InterfaceAudience.Public;
 @Public
 @Evolving
 public abstract class ContainerCheckpointResponse {
+  
+  public static final int SUCCESS = 0;
+  public static final int FAILURE = -1;
 
   @Public
   @Unstable

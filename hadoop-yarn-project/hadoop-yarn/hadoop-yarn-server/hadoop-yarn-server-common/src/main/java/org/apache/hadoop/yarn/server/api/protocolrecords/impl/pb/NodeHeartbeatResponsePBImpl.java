@@ -155,8 +155,11 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     if (this.appCollectorsMap != null) {
       addAppCollectorsMapToProto();
     }
-    if(this.containerCheckpoints != null) {
+    if (this.containerCheckpoints != null) {
       addContainerCheckpointsToProto();
+    }
+    if (this.containerRestores != null) {
+      addContainerRestoresToProto();
     }
   }
 

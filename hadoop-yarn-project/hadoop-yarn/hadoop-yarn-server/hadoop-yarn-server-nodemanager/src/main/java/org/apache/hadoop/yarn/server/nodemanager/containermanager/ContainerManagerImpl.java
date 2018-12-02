@@ -1964,4 +1964,9 @@ public class ContainerManagerImpl extends CompositeService implements
       dispatcher.getEventHandler().handle(new LogHandlerTokenUpdatedEvent());
     }
   }
+  
+  @Override
+  public ContainerCR getContainerCR() {
+    return this.containerCR;
+  }
 }
