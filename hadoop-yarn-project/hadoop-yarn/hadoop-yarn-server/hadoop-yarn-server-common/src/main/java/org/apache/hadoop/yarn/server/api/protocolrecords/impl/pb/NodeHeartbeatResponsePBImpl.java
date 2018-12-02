@@ -31,9 +31,11 @@ import com.google.common.collect.Interners;
 import com.google.protobuf.ByteString;
 
 import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCRFinishRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerRestoreRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerRequestPBImpl;
@@ -55,6 +57,7 @@ import org.apache.hadoop.yarn.proto.YarnProtos.ContainerProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ResourceProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.AppCollectorDataProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.ContainerQueuingLimitProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCRFinishRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.SignalContainerRequestProto;
@@ -95,6 +98,7 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
   private List<SignalContainerRequest> containersToSignal = null;
   private List<ContainerCheckpointRequest> containerCheckpoints = null;
   private List<ContainerRestoreRequest> containerRestores = null;
+  private List<ContainerCRFinishRequest> containerCRFinishList = null;
 
   private static final Interner<ByteString> BYTE_STRING_INTERNER =
       Interners.newWeakInterner();
@@ -160,6 +164,9 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     }
     if (this.containerRestores != null) {
       addContainerRestoresToProto();
+    }
+    if (this.containerCRFinishList != null) {
+      addContainerCRFinishToProto();
     }
   }
 
@@ -893,6 +900,22 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     this.containerRestores.addAll(containerRestores);
   }
   
+  @Override
+  public List<ContainerCRFinishRequest> getContainerCRFinishList() {
+    initContainerCRFinishList();
+    return containerCRFinishList;
+  }
+  
+  @Override
+  public void addAllContainerCRFinish(
+      List<ContainerCRFinishRequest> containerCRFinish) {
+    if (containerCRFinish == null) {
+      return;
+    }
+    initContainerCRFinishList();
+    this.containerCRFinishList.addAll(containerCRFinish);
+  }
+  
   private void initContainerCheckpoints() {
     if (containerCheckpoints != null) {
       return;
@@ -971,6 +994,45 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     };
     builder.addAllContainerRestores(iterable);
   }
+  
+  private void initContainerCRFinishList() {
+    if (containerCRFinishList != null) {
+      return;
+    }
+    NodeHeartbeatResponseProtoOrBuilder p = viaProto ? proto : builder;
+    List<ContainerCRFinishRequestProto> pList = p.getContainerCrFinishList();
+    this.containerCRFinishList = new ArrayList<>();
+    for (ContainerCRFinishRequestProto c : pList) {
+      this.containerCRFinishList.add(convertFromProtoFormat(c));
+    }
+  }
+  
+  private void addContainerCRFinishToProto() {
+    maybeInitBuilder();
+    builder.clearContainerCrFinish();
+    if (containerCRFinishList == null) {
+      return;
+    }
+    Iterable<ContainerCRFinishRequestProto> iterable
+        = new Iterable<ContainerCRFinishRequestProto>() {
+      @Override
+      public Iterator<ContainerCRFinishRequestProto> iterator() {
+        return new Iterator<ContainerCRFinishRequestProto>() {
+          Iterator<ContainerCRFinishRequest> itr =
+              containerCRFinishList.iterator();
+          @Override
+          public boolean hasNext() {
+            return itr.hasNext();
+          }
+          @Override
+          public ContainerCRFinishRequestProto next() {
+            return convertToProtoFormat(itr.next());
+          }
+        };
+      }
+    };
+    builder.addAllContainerCrFinish(iterable);
+  }
 
   private ContainerQueuingLimit convertFromProtoFormat(
       ContainerQueuingLimitProto p) {
@@ -1020,5 +1082,14 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     return new ContainerRestoreRequestPBImpl(p);
   }
   
+  private ContainerCRFinishRequestProto convertToProtoFormat(
+      ContainerCRFinishRequest t) {
+    return ((ContainerCRFinishRequestPBImpl)t).getProto();
+  }
+  
+  private ContainerCRFinishRequest convertFromProtoFormat(
+      ContainerCRFinishRequestProto p) {
+    return new ContainerCRFinishRequestPBImpl(p);
+  }
 }
 
