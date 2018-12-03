@@ -1385,6 +1385,13 @@
         <artifactId>jcodings</artifactId>
         <version>1.0.13</version>
       </dependency>
+      
+      <dependency>
+        <groupId>com.github.fracpete</groupId>
+        <artifactId>rsync4j-all</artifactId>
+        <version>3.1.2-13</version>
+      </dependency>
+      
     </dependencies>
   </dependencyManagement>
 
