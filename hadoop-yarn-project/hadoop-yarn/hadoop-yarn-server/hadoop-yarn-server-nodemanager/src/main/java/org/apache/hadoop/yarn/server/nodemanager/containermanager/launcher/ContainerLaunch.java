@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -60,6 +61,7 @@ import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
@@ -85,6 +87,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerExitEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerKillEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerState;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCRCheckpointEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.DockerLinuxContainerRuntime;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ResourceLocalizationService;
@@ -1890,4 +1893,40 @@ public class ContainerLaunch implements Callable<Integer> {
       LOG.warn("Failed to delete " + path, e);
     }
   }
+  
+  public void checkpointContainer(ContainerCheckpointRequest request)
+      throws IOException {
+    ContainerId containerId = container.getContainerTokenIdentifier()
+        .getContainerID();
+    String containerIdStr = containerId.toString();
+    String user = container.getUser();
+    boolean isLaunched = !containerAlreadyLaunched.compareAndSet(false, true);
+    if (!isLaunched) {
+      LOG.info("Container " + containerIdStr + " not launched. Not checkpointed");
+      return;
+    }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(String.format(
+          "Getting pid for container %d from pid file %s",
+              containerIdStr, Objects.toString(pidFilePath)));
+    }
+    try {
+      String processId = null;
+      if (pidFilePath != null) {
+        processId = getContainerPid(pidFilePath);
+      }
+      if (processId != null) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(String.format("Run criu dump"));
+        }
+        dispatcher.getEventHandler().handle(new ContainerCRCheckpointEvent(
+            container, processId, request));
+      }
+    } catch (Exception e) {
+      String msg = String.format(
+          "Exception while checkpointing container (containerId=%s): %s",
+          containerIdStr, StringUtils.stringifyException(e));
+      LOG.warn(msg);
+    }
+}
 }

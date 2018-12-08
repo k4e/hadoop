@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
@@ -209,6 +210,26 @@ public class ContainersLauncher extends AbstractService
         } catch (Exception e) {
           LOG.info("Got exception while resuming container: " +
             StringUtils.stringifyException(e));
+        }
+        break;
+
+      case CHECKPOINT_CONTAINER:
+        CheckpointContainersLauncherEvent checkpointEvent =
+            (CheckpointContainersLauncherEvent)event;
+        ContainerLaunch checkpointContainerLaunch = running.get(containerId);
+        if (checkpointContainerLaunch == null) {
+          LOG.info("Container " + containerId +
+              " not running, checkpointing not performed.");
+          return;
+        }
+        ContainerCheckpointRequest checkpointRequest =
+            checkpointEvent.getCheckpointRequest();
+        try {
+          checkpointContainerLaunch.checkpointContainer(checkpointRequest);
+        } catch (IOException e) {
+          LOG.info(String.format(
+              "Got exception while checkpointing container (containerId=%s)",
+              containerId));
         }
         break;
     }

@@ -21,6 +21,9 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.UpdateContainerTokenEvent;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCR;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCREventType;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCRRestoreEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.event.LogHandlerTokenUpdatedEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.scheduler.ContainerSchedulerEvent;
 import org.slf4j.Logger;
@@ -43,6 +46,9 @@ import org.apache.hadoop.service.Service;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.CommitResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
@@ -101,6 +107,8 @@ import org.apache.hadoop.yarn.server.api.records.ContainerQueuingLimit;
 import org.apache.hadoop.yarn.server.api.records.OpportunisticContainersStatus;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedContainersEvent;
+import org.apache.hadoop.yarn.server.nodemanager.CMgrContainerCheckpointEvent;
+import org.apache.hadoop.yarn.server.nodemanager.CMgrContainerRestoreEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrSignalContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
@@ -127,6 +135,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerImpl;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerKillEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerReInitEvent;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.CheckpointContainersLauncherEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainersLauncher;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainersLauncherEventType;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.SignalContainersLauncherEvent;
@@ -223,6 +232,8 @@ public class ContainerManagerImpl extends CompositeService implements
   private final ContainerScheduler containerScheduler;
 
   private long waitForContainersOnShutdownMillis;
+  
+  private ContainerCR containerCR;
 
   // NM metrics publisher is set only if the timeline service v.2 is enabled
   private NMTimelinePublisher nmMetricsPublisher;
@@ -270,6 +281,9 @@ public class ContainerManagerImpl extends CompositeService implements
     }
     this.containersMonitor = createContainersMonitor(exec);
     addService(this.containersMonitor);
+    
+    this.containerCR = new ContainerCR(context, dispatcher);
+    addService(this.containerCR);
 
     dispatcher.register(ContainerEventType.class,
         new ContainerEventDispatcher());
@@ -282,7 +296,8 @@ public class ContainerManagerImpl extends CompositeService implements
     dispatcher.register(ContainersMonitorEventType.class, containersMonitor);
     dispatcher.register(ContainersLauncherEventType.class, containersLauncher);
     dispatcher.register(ContainerSchedulerEventType.class, containerScheduler);
-
+    dispatcher.register(ContainerCREventType.class, containerCR);
+    
     addService(dispatcher);
 
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -1900,6 +1915,24 @@ public class ContainerManagerImpl extends CompositeService implements
       LOG.info("Container " + containerId + " no longer exists");
     }
   }
+  
+  private void internalCheckpointContainer(
+      ContainerCheckpointRequest request) {
+    ContainerId containerId = request.getContainerId();
+    Container container = this.context.getContainers().get(containerId);
+    if (container == null) {
+      LOG.info("Container " + containerId + " no longer exists");
+      return;
+    }
+    LOG.info(String.format(
+        "Starting container checkpointing (containerId=%s)",
+            containerId));
+    this.dispatcher.getEventHandler().handle(
+        new CheckpointContainersLauncherEvent(container, request));
+    LOG.info(String.format(
+        "Completed container checkpointing (containerId=%s)",
+            containerId));
+  }
 
   @Override
   public ContainerScheduler getContainerScheduler() {
@@ -1912,5 +1945,10 @@ public class ContainerManagerImpl extends CompositeService implements
     if (!invalidApps.isEmpty()) {
       dispatcher.getEventHandler().handle(new LogHandlerTokenUpdatedEvent());
     }
+  }
+  
+  @Override
+  public ContainerCR getContainerCR() {
+    return this.containerCR;
   }
 }

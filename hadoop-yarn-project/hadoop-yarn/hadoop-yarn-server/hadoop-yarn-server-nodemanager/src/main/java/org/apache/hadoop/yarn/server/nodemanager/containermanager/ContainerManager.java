@@ -24,6 +24,7 @@ import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.api.records.ContainerQueuingLimit;
 import org.apache.hadoop.yarn.server.api.records.OpportunisticContainersStatus;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerManagerEvent;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCR;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor
     .ContainersMonitor;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.scheduler
@@ -45,4 +46,6 @@ public interface ContainerManager extends ServiceStateChangeListener,
   ContainerScheduler getContainerScheduler();
 
   void handleCredentialUpdate();
+
+  ContainerCR getContainerCR();
 }

@@ -177,4 +177,9 @@ public interface RMContext extends ApplicationMasterServiceContext {
 
   void setPlacementConstraintManager(
       PlacementConstraintManager placementConstraintManager);
+
+  RMContainerMigrationService getRMContainerMigrationService();
+  
+  void setRMContainerMigrationService(
+      RMContainerMigrationService rmContainerMigrationService);
 }

@@ -46,6 +46,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationTimeout;
 import org.apache.hadoop.yarn.api.records.ApplicationTimeoutType;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerReport;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.SignalContainerCommand;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
@@ -304,6 +305,9 @@ public class ApplicationCLI extends YarnCLI {
           " Default command is OUTPUT_THREAD_DUMP.");
       opts.getOption(SIGNAL_CMD).setArgName("container ID [signal command]");
       opts.getOption(SIGNAL_CMD).setArgs(3);
+      opts.addOption(MOVE_CMD, true, "[Experimental] Perform live migration");
+      opts.getOption(MOVE_CMD).setArgName("container ID> <Destination Node ID");
+      opts.getOption(MOVE_CMD).setArgs(2);
     }
 
     int exitCode = -1;
@@ -626,6 +630,15 @@ public class ApplicationCLI extends YarnCLI {
         }
         return client.actionStart(appName);
       }
+    } else if (cliParser.hasOption(MOVE_CMD)) {
+      if (hasAnyOtherCLIOptions(cliParser, opts, MOVE_CMD)) {
+        printUsage(title, opts);
+        return exitCode;
+      }
+      final String[] moveArgs = cliParser.getOptionValues(MOVE_CMD);
+      final String containerId = moveArgs[0];
+      final String dstNodeId = moveArgs[1];
+      moveContainer(containerId, dstNodeId);
     } else {
       syserr.println("Invalid Command Usage : ");
       printUsage(title, opts);
@@ -1191,5 +1204,12 @@ public class ApplicationCLI extends YarnCLI {
       }
     }
     return false;
+  }
+  
+  private void moveContainer(String containerIdStr, String dstNodeIdStr)
+      throws YarnException, IOException {
+    ContainerId containerId = ContainerId.fromString(containerIdStr);
+    NodeId dstNodeId = NodeId.fromString(dstNodeIdStr);
+    client.moveContainer(containerId, dstNodeId);
   }
 }

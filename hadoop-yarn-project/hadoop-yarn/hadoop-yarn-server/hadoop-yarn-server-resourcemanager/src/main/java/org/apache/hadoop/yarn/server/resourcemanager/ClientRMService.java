@@ -56,6 +56,8 @@ import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.ApplicationsRequestScope;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.FailApplicationAttemptRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.FailApplicationAttemptResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptReportRequest;
@@ -127,6 +129,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ApplicationTimeoutType;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerReport;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Priority;
@@ -1836,6 +1839,72 @@ public class ClientRMService extends AbstractService implements
         GetAllResourceTypeInfoResponse.newInstance();
     response.setResourceTypeInfo(ResourceUtils.getResourcesTypeInfo());
     return response;
+  }
+  
+  
+  @Override
+  public ContainerMigrationResponse moveContainer(
+      ContainerMigrationRequest request) throws YarnException, IOException {
+    ContainerId sourceContainerId = request.getContainerId();
+    NodeId destinationNodeId = request.getDestination();
+    UserGroupInformation callerUGI;
+    try {
+      callerUGI = UserGroupInformation.getCurrentUser();
+    } catch (IOException e) {
+      LOG.info("Error getting UGI ", e);
+      throw RPCUtil.getRemoteException(e);
+    }
+    ApplicationId applicationId = sourceContainerId.getApplicationAttemptId()
+        .getApplicationId();
+    verifyUserAccessForRMApp(applicationId, callerUGI,
+        AuditConstants.CONTAINER_MIGRATION, ApplicationAccessType.MODIFY_APP,
+        true);
+    RMContainer rmContainer = scheduler.getRMContainer(sourceContainerId);
+    if (rmContainer == null) {
+      String description = "Trying to migrate an absent container";
+      RMAuditLogger.logFailure(callerUGI.getUserName(),
+          AuditConstants.CONTAINER_MIGRATION, "UNKNOWN", "ClientRMService",
+          description, applicationId, sourceContainerId, null);
+      throw RPCUtil.getRemoteException(description + " " + sourceContainerId);
+    }
+    NodeId sourceNodeId = rmContainer.getContainer().getNodeId();
+    RMNode rmSourceNode = this.rmContext.getRMNodes().get(sourceNodeId);
+    if (rmSourceNode == null) {
+      String description =
+          "Trying to migrate the container from an absent source node";
+      RMAuditLogger.logFailure(callerUGI.getUserName(),
+          AuditConstants.CONTAINER_MIGRATION, "UNKNOWN", "ClientRMService",
+          description, applicationId, sourceContainerId, null);
+      throw RPCUtil.getRemoteException(description + " " + sourceNodeId);
+    }
+    RMNode rmDestinationNode = this.rmContext.getRMNodes().get(destinationNodeId);
+    if (rmDestinationNode == null) {
+      String description =
+          "Trying to migrate the container to an absent destination node";
+      RMAuditLogger.logFailure(callerUGI.getUserName(),
+          AuditConstants.CONTAINER_MIGRATION, "UNKNOWN", "ClientRMService",
+          description, applicationId, sourceContainerId, null);
+      throw RPCUtil.getRemoteException(description + " " + destinationNodeId);
+    }
+    if (rmSourceNode.getNodeID().equals(rmDestinationNode.getNodeID())) {
+      String description = String.format(
+          "Trying to migrate between same node (%s to %s)",
+          rmSourceNode.getNodeID(), rmDestinationNode.getNodeID());
+      LOG.warn(description);
+    }
+    try {
+      rmContext.getRMContainerMigrationService().move(
+          rmContainer, rmSourceNode, rmDestinationNode);
+    } catch (YarnException e) {
+      String description = e.getMessage();
+      RMAuditLogger.logFailure(callerUGI.getUserName(),
+          AuditConstants.CONTAINER_MIGRATION, "UNKNOWN", "ClientRMService",
+          description, applicationId, sourceContainerId, null);
+      throw RPCUtil.getRemoteException(description);
+    }
+    RMAuditLogger.logSuccess(callerUGI.getShortUserName(),
+        AuditConstants.CONTAINER_MIGRATION, "ClientRMService", applicationId);
+    return recordFactory.newRecordInstance(ContainerMigrationResponse.class);
   }
 
   @VisibleForTesting
