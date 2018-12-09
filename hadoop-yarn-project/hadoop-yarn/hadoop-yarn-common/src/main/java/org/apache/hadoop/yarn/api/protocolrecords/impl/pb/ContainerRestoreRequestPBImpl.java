@@ -123,18 +123,6 @@ public class ContainerRestoreRequestPBImpl extends ContainerRestoreRequest {
   }
 
   @Override
-  public int getPort() {
-    ContainerRestoreRequestProtoOrBuilder p = viaProto ? proto : builder;
-    return p.getPort();
-  }
-
-  @Override
-  public void setPort(int port) {
-    maybeInitBuilder();
-    this.builder.setPort(port);
-  }
-
-  @Override
   public int hashCode() {
     return getProto().hashCode();
   }

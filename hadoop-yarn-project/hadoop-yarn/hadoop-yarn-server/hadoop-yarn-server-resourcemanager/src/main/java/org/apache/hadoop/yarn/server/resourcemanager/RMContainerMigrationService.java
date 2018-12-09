@@ -72,6 +72,7 @@ public class RMContainerMigrationService extends AbstractService {
       migrationAttempts.put(applicationAttemptId, migrationAttempt + 1L);
     }
     long allocationId = BASE_ALLOCATION_ID + migrationAttempt;
+    String sourceHost = rmSourceNode.getHostName();
     
     // 移行先のコンテナをアロケートする
     String destinationHost = rmDestinationNode.getHostName();
@@ -112,7 +113,7 @@ public class RMContainerMigrationService extends AbstractService {
         break;
       }
       try {
-        Thread.sleep(1000);
+        Thread.sleep(100);
       } catch (InterruptedException e) {
         LOG.error(e);
         break;
@@ -131,8 +132,9 @@ public class RMContainerMigrationService extends AbstractService {
     int destinationPort = PORT;
     NodeId sourceNodeId = rmSourceNode.getNodeID();
     ContainerCheckpointRequest checkpointRequest =
-        ContainerCheckpointRequest.newInstance(migrationId, sourceContainerId);
-
+        ContainerCheckpointRequest.newInstance(migrationId, sourceContainerId,
+            destinationHost);
+    
     // TODO リストア リクエストを送信する
     ContainerId destinationContainerId = rmDestinationContainer
         .getContainerId();
@@ -140,8 +142,7 @@ public class RMContainerMigrationService extends AbstractService {
         .getContainerToken();
     ContainerRestoreRequest restoreRequest = ContainerRestoreRequest
         .newInstance(migrationId, destinationContainerId,
-            destinationContainerToken, sourceContainerId, destinationHost,
-            destinationPort);
+            destinationContainerToken, sourceContainerId, sourceHost);
     
     // TODO 移行元のコンテナを終了する
     

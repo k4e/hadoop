@@ -289,8 +289,8 @@ public class ContainerCR extends AbstractService
   private final String checkpointDirectory;
   private final String restoreDirectory;
   private final ConcurrentHashMap<Pair<Long, Integer>, String> sourceImagesDirStore;
-  private final LinkedList<ContainerCheckpointResponse> checkpointResponseQueue;
-  private final LinkedList<ContainerRestoreResponse> restoreResponseQueue;
+  private final ConcurrentHashMap<Pair<Long, Integer>, Integer> checkpointStateStore;
+  private final ConcurrentHashMap<Pair<Long, Integer>, Integer> restoreStateStore;
   private ServerSocket serverSocket = null;
   private MessageListener messageListener = null;
   
@@ -308,8 +308,8 @@ public class ContainerCR extends AbstractService
       this.restoreDirectory = String.format("/%s", RIMG_DIR);
     }
     this.sourceImagesDirStore = new ConcurrentHashMap<>();
-    this.checkpointResponseQueue = new LinkedList<>();
-    this.restoreResponseQueue = new LinkedList<>();
+    this.checkpointStateStore = new ConcurrentHashMap<>();
+    this.restoreStateStore = new ConcurrentHashMap<>();
   }
   
   @Override
@@ -340,22 +340,34 @@ public class ContainerCR extends AbstractService
     }
   }
   
-  public List<ContainerCheckpointResponse> getLastCheckpointResponses() {
-    List<ContainerCheckpointResponse> responses;
-    synchronized (this.checkpointResponseQueue) {
-      responses = new ArrayList<>(this.checkpointResponseQueue);
-      this.checkpointResponseQueue.clear();
+  public ContainerCheckpointResponse getCheckpointResponse(
+      ContainerCheckpointRequest request, boolean failureIfNull) {
+    long id = request.getId();
+    Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
+    Integer status = this.checkpointStateStore.get(key);
+    if (status == null && failureIfNull) {
+      status = ContainerCheckpointResponse.FAILURE;
     }
-    return responses;
+    if (status != null) {
+      return ContainerCheckpointResponse.newInstance(id, status);
+    } else {
+      return null;
+    }
   }
   
-  public List<ContainerRestoreResponse> getLastRestoreResponses() {
-    List<ContainerRestoreResponse> responses;
-    synchronized (this.restoreResponseQueue) {
-      responses = new ArrayList<>(this.restoreResponseQueue);
-      this.restoreResponseQueue.clear();
+  public ContainerRestoreResponse getRestoreResponse(
+      ContainerRestoreRequest request, boolean failureIfNull) {
+    long id = request.getId();
+    Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
+    Integer status = this.restoreStateStore.get(key);
+    if (status == null && failureIfNull) {
+      status = ContainerRestoreResponse.FAILURE;
     }
-    return responses;
+    if (status != null) {
+      return ContainerRestoreResponse.newInstance(id, status);
+    } else {
+      return null;
+    }
   }
   
   private void startMessageListener() throws IOException, InterruptedException {
@@ -417,18 +429,18 @@ public class ContainerCR extends AbstractService
     }
   }
   
-  private void addCheckpointResponse(long id, int status) {
-    synchronized (this.checkpointResponseQueue) {
-      this.checkpointResponseQueue.add(
-          ContainerCheckpointResponse.newInstance(id, status));
-    }
+  private void setCheckpointResponse(ContainerCheckpointRequest request,
+      int status) {
+    Pair<Long, Integer> key = Pair.of(
+        request.getId(), request.getContainerId().hashCode());
+    this.checkpointStateStore.put(key, status);
   }
   
-  private void addRestoreResponse(long id, int status) {
-    synchronized (this.restoreResponseQueue) {
-      this.restoreResponseQueue.add(
-          ContainerRestoreResponse.newInstance(id, status));
-    }
+  private void setRestoreResponse(ContainerRestoreRequest request,
+      int state) {
+    Pair<Long, Integer> key = Pair.of(
+        request.getId(), request.getContainerId().hashCode());
+    this.restoreStateStore.put(key, state);
   }
   
   private String getPath(String p, String... d) {
@@ -456,8 +468,7 @@ public class ContainerCR extends AbstractService
     CMessage cmessage;
     if (imagesDir != null) {
       cmessage = new CMessage(id, hash, true, imagesDir);
-    }
-    else {
+    } else {
       cmessage = new CMessage(id, hash, false, NULL_DIR);
     }
     String json = GSON.toJson(cmessage);
@@ -494,7 +505,6 @@ public class ContainerCR extends AbstractService
     String diagnostics = String.format(
         "Checkpointed process %s as user %s for container %s into %s, result = success",
         processId, user, containerId.toString());
-    addCheckpointResponse(id, ContainerCheckpointResponse.SUCCESS);
     dispatcher.getEventHandler().handle(
         new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
   }
@@ -505,7 +515,6 @@ public class ContainerCR extends AbstractService
         "Checkpointed process %s as user %s for container %s, result = failure",
         processId, user, containerId.toString());
     LOG.error("CheckpointAndTransport: " + msg);
-    addCheckpointResponse(id, ContainerCheckpointResponse.FAILURE);
     dispatcher.getEventHandler().handle(
         new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
   }
@@ -515,7 +524,6 @@ public class ContainerCR extends AbstractService
     String diagnostics = String.format(
         "Restored container as %s from source container %s, result = success",
         destinationContainerId.toString(), sourceContainerId.toString());
-    addRestoreResponse(id, ContainerRestoreResponse.SUCCESS);
     dispatcher.getEventHandler().handle(
         new ContainerDiagnosticsUpdateEvent(
             destinationContainerId, diagnostics));
@@ -527,7 +535,6 @@ public class ContainerCR extends AbstractService
         "Restored container as %s from source container %s, result = failure",
         destinationContainerId.toString(), sourceContainerId.toString());
     LOG.error("RestoreByTransport: " + msg);
-    addRestoreResponse(id, ContainerRestoreResponse.FAILURE);
     dispatcher.getEventHandler().handle(
         new ContainerDiagnosticsUpdateEvent(
             destinationContainerId, diagnostics));

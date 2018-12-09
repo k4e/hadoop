@@ -13,7 +13,7 @@ public abstract class ContainerCheckpointRequest {
   @Public
   @Unstable
   public static ContainerCheckpointRequest newInstance(long id,
-      ContainerId containerId) {
+      ContainerId containerId, String address) {
     ContainerCheckpointRequest req = Records.newRecord(
         ContainerCheckpointRequest.class);
     req.setContainerId(containerId);
@@ -35,4 +35,12 @@ public abstract class ContainerCheckpointRequest {
   @Public
   @Unstable
   public abstract void setContainerId(ContainerId containerId);
+  
+  @Public
+  @Unstable
+  public abstract String getAddress();
+  
+  @Public
+  @Unstable
+  public abstract void setAddress(String address);
 }

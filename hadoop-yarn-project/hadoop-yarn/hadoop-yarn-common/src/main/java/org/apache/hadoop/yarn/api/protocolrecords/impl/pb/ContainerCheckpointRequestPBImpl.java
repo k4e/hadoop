@@ -64,6 +64,18 @@ public class ContainerCheckpointRequestPBImpl
     }
     this.containerId = containerId;
   }
+  
+  @Override
+  public String getAddress() {
+    ContainerCheckpointRequestProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getAddress();
+  }
+  
+  @Override
+  public void setAddress(String address) {
+    maybeInitBuilder();
+    this.builder.setAddress(address);
+  }
 
   @Override
   public int hashCode() {

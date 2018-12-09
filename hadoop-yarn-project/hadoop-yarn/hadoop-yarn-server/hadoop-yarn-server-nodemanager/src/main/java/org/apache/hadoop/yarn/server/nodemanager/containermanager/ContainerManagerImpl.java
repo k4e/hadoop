@@ -46,9 +46,12 @@ import org.apache.hadoop.service.Service;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.CommitResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
@@ -107,8 +110,6 @@ import org.apache.hadoop.yarn.server.api.records.ContainerQueuingLimit;
 import org.apache.hadoop.yarn.server.api.records.OpportunisticContainersStatus;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedContainersEvent;
-import org.apache.hadoop.yarn.server.nodemanager.CMgrContainerCheckpointEvent;
-import org.apache.hadoop.yarn.server.nodemanager.CMgrContainerRestoreEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrSignalContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
@@ -1915,24 +1916,6 @@ public class ContainerManagerImpl extends CompositeService implements
       LOG.info("Container " + containerId + " no longer exists");
     }
   }
-  
-  private void internalCheckpointContainer(
-      ContainerCheckpointRequest request) {
-    ContainerId containerId = request.getContainerId();
-    Container container = this.context.getContainers().get(containerId);
-    if (container == null) {
-      LOG.info("Container " + containerId + " no longer exists");
-      return;
-    }
-    LOG.info(String.format(
-        "Starting container checkpointing (containerId=%s)",
-            containerId));
-    this.dispatcher.getEventHandler().handle(
-        new CheckpointContainersLauncherEvent(container, request));
-    LOG.info(String.format(
-        "Completed container checkpointing (containerId=%s)",
-            containerId));
-  }
 
   @Override
   public ContainerScheduler getContainerScheduler() {
@@ -1950,5 +1933,52 @@ public class ContainerManagerImpl extends CompositeService implements
   @Override
   public ContainerCR getContainerCR() {
     return this.containerCR;
+  }
+  
+  @Override
+  public ContainerCheckpointResponse checkpointContainer(
+      ContainerCheckpointRequest request) throws YarnException, IOException {
+    ContainerId containerId = request.getContainerId();
+    Container container = this.context.getContainers().get(containerId);
+    if (container == null) {
+      LOG.info("Container " + containerId + " no longer exists");
+      return ContainerCheckpointResponse.newInstance(
+          request.getId(), ContainerCheckpointResponse.FAILURE);
+    }
+    LOG.info(String.format(
+        "Starting container checkpoint (containerId=%s)",
+        containerId.toString()));
+    this.dispatcher.getEventHandler().handle(
+        new CheckpointContainersLauncherEvent(container, request));
+    ContainerCheckpointResponse response = this.containerCR
+        .getCheckpointResponse(request, true);
+    LOG.info(String.format(
+        "Completed container checkpoint (containerId=%s, status=%d)",
+        containerId.toString(), response.getStatus()));
+    return response;
+  }
+  
+  @Override
+  public ContainerRestoreResponse restoreContainer(
+      ContainerRestoreRequest request) throws YarnException, IOException {
+    ContainerId containerId = request.getContainerId();
+    LOG.info(String.format(
+        "Starting container restore (containerId=%s)",
+        containerId.toString()));
+    this.dispatcher.getEventHandler().handle(
+        new ContainerCRRestoreEvent(request));
+    ContainerRestoreResponse response = this.containerCR
+        .getRestoreResponse(request, true);
+    LOG.info(String.format(
+        "Completed container restore (containerId=%s, status=%d)",
+        containerId.toString(), response.getStatus()));
+    return response;
+  }
+  
+  @Override
+  public ContainerCRFinishResponse crFinish(ContainerCRFinishRequest request)
+      throws YarnException, IOException {
+    // TODO
+    return null;
   }
 }

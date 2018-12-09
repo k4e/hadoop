@@ -15,14 +15,13 @@ public abstract class ContainerRestoreRequest {
   @Unstable
   public static ContainerRestoreRequest newInstance(long id,
       ContainerId containerId, Token containerToken,
-      ContainerId sourceContainerId, String address, int port) {
+      ContainerId sourceContainerId, String address) {
     ContainerRestoreRequest req =
         Records.newRecord(ContainerRestoreRequest.class);
     req.setContainerId(containerId);
     req.setContainerToken(containerToken);
     req.setSourceContainerId(sourceContainerId);
     req.setAddress(address);
-    req.setPort(port);
     return req;
   }
   
@@ -65,12 +64,4 @@ public abstract class ContainerRestoreRequest {
   @Public
   @Unstable
   public abstract void setAddress(String address);
-  
-  @Public
-  @Unstable
-  public abstract int getPort();
-  
-  @Public
-  @Unstable
-  public abstract void setPort(int port);
 }

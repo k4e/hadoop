@@ -24,6 +24,12 @@ import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocolPB;
 import org.apache.hadoop.yarn.api.protocolrecords.CommitResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.IncreaseContainersResourceResponse;
@@ -36,6 +42,12 @@ import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainersResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StopContainersResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.CommitResponsePBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCRFinishRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCRFinishResponsePBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointResponsePBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerRestoreRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerRestoreResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerUpdateRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerUpdateResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.IncreaseContainersResourceRequestPBImpl;
@@ -78,6 +90,12 @@ import org.apache.hadoop.yarn.proto.YarnServiceProtos.StartContainersResponsePro
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.StopContainersRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.StopContainersResponseProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.CommitResponseProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCRFinishRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCRFinishResponseProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointResponseProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreResponseProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerUpdateRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerUpdateResponseProto;
 
@@ -261,6 +279,47 @@ public class ContainerManagementProtocolPBServiceImpl implements ContainerManage
     } catch (YarnException e) {
       throw new ServiceException(e);
     } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+  }
+  
+  @Override
+  public ContainerCheckpointResponseProto checkpointContainer(
+      RpcController controller, ContainerCheckpointRequestProto proto)
+      throws ServiceException {
+    ContainerCheckpointRequest request =
+        new ContainerCheckpointRequestPBImpl(proto);
+    try {
+      ContainerCheckpointResponse response = real.checkpointContainer(request);
+      return ((ContainerCheckpointResponsePBImpl)response).getProto();
+    } catch (YarnException | IOException e) {
+      throw new ServiceException(e);
+    }
+  }
+  
+  @Override
+  public ContainerRestoreResponseProto restoreContainer(
+      RpcController controller, ContainerRestoreRequestProto proto)
+      throws ServiceException {
+    ContainerRestoreRequest request =
+        new ContainerRestoreRequestPBImpl(proto);
+    try {
+      ContainerRestoreResponse response = real.restoreContainer(request);
+      return ((ContainerRestoreResponsePBImpl)response).getProto();
+    } catch (YarnException | IOException e) {
+      throw new ServiceException(e);
+    }
+  }
+  
+  @Override
+  public ContainerCRFinishResponseProto crFinish(RpcController controller,
+      ContainerCRFinishRequestProto proto) throws ServiceException {
+    ContainerCRFinishRequest request =
+        new ContainerCRFinishRequestPBImpl(proto);
+    try {
+      ContainerCRFinishResponse response = real.crFinish(request);
+      return ((ContainerCRFinishResponsePBImpl)response).getProto();
+    } catch (YarnException | IOException e) {
       throw new ServiceException(e);
     }
   }
