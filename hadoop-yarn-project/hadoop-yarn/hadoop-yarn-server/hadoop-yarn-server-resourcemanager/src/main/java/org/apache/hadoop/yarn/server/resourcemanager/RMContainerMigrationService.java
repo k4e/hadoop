@@ -22,7 +22,9 @@ import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -46,8 +48,7 @@ import org.apache.hadoop.yarn.util.ConverterUtils;
 public class RMContainerMigrationService extends AbstractService {
 
   private static final Log LOG = LogFactory.getLog(RMContainerMigrationService.class);
-  private static final int PORT = 65432;
-  private static final int RETRY_LIMIT = 30;
+  private static final int RETRY_LIMIT = 300;
   // TODO 確実にこのサービスがアロケートしたコンテナであることがわかるような方法をとる
   private static final long BASE_ALLOCATION_ID = Long.MAX_VALUE / 2 + RMContainerMigrationService.class.hashCode();
   
@@ -67,7 +68,7 @@ public class RMContainerMigrationService extends AbstractService {
   }
 
   void move(RMContainer rmSourceContainer, RMNode rmSourceNode,
-      RMNode rmDestinationNode) throws YarnException {
+      RMNode rmDestinationNode) throws YarnException, IOException {
     long migrationId = this.countMigration.getAndIncrement();
     ApplicationAttemptId applicationAttemptId =
         rmSourceContainer.getApplicationAttemptId();
@@ -136,14 +137,21 @@ public class RMContainerMigrationService extends AbstractService {
     }
     // TODO 指定したノードでアロケートできなかった場合には破棄する
     LOG.info(rmDestinationContainer);
-    // チェックポイント リクエストを送信する
-    int destinationPort = PORT;
+    
+    // 2 つのノードの ContainerManager プロキシを取得
     NodeId sourceNodeId = rmSourceNode.getNodeID();
+    NodeId destinationNodeId = rmDestinationNode.getNodeID();
+    ContainerManagementProtocol sourceContainerManager
+        = getContainerMgrProxy(sourceNodeId, applicationAttemptId);
+    ContainerManagementProtocol destinationContainerManager
+        = getContainerMgrProxy(destinationNodeId, applicationAttemptId);
+    // チェックポイント リクエストを送信する
     ContainerCheckpointRequest checkpointRequest =
         ContainerCheckpointRequest.newInstance(migrationId, sourceContainerId,
-            destinationHost);
-    
-    // TODO リストア リクエストを送信する
+        destinationHost);
+    ContainerCheckpointResponse checkpointResponse =
+        sourceContainerManager.checkpointContainer(checkpointRequest);
+    // リストア リクエストを送信する
     ContainerId destinationContainerId = rmDestinationContainer
         .getContainerId();
     Token destinationContainerToken = rmDestinationContainer.getContainer()
@@ -151,8 +159,9 @@ public class RMContainerMigrationService extends AbstractService {
     ContainerRestoreRequest restoreRequest = ContainerRestoreRequest
         .newInstance(migrationId, destinationContainerId,
             destinationContainerToken, sourceContainerId, sourceHost);
-    
-    // TODO 移行元のコンテナを終了する
+    ContainerRestoreResponse restoreResponse =
+        destinationContainerManager.restoreContainer(restoreRequest);
+    // TODO 終了処理を記述する
     
   }
   
