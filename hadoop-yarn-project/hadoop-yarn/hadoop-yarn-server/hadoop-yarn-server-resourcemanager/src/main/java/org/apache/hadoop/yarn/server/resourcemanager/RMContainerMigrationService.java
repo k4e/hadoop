@@ -1,5 +1,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -14,7 +16,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
@@ -28,12 +33,15 @@ import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.Token;
+import org.apache.hadoop.yarn.client.NMProxy;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.ipc.YarnRPC;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Allocation;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ContainerUpdates;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
+import org.apache.hadoop.yarn.util.ConverterUtils;
 
 public class RMContainerMigrationService extends AbstractService {
 
@@ -164,5 +172,25 @@ public class RMContainerMigrationService extends AbstractService {
         }
       }
     }
+  }
+  
+  private ContainerManagementProtocol getContainerMgrProxy(NodeId nodeId,
+      ApplicationAttemptId attemptId) throws IOException {
+    InetSocketAddress address = NetUtils
+        .createSocketAddrForHost(nodeId.getHost(), nodeId.getPort());
+    YarnRPC rpc = getYarnRPC();
+    UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
+    String user = rmContext.getRMApps().get(attemptId.getApplicationId())
+        .getUser();
+    Token token = rmContext.getNMTokenSecretManager().createNMToken(
+        attemptId, nodeId, user);
+    currentUser.addToken(ConverterUtils.convertFromYarn(token, address));
+    return NMProxy.createNMProxy(rmContext.getYarnConfiguration(),
+        ContainerManagementProtocol.class, currentUser, rpc, address);
+  }
+  
+  private YarnRPC getYarnRPC() {
+    // TODO: Don't create again and again.
+    return YarnRPC.create(this.rmContext.getYarnConfiguration());
   }
 }
