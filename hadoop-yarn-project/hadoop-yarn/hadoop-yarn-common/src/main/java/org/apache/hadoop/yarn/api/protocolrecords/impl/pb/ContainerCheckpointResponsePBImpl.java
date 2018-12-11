@@ -51,6 +51,24 @@ public class ContainerCheckpointResponsePBImpl
     maybeInitBuilder();
     this.builder.setStatus(status);
   }
+  
+  @Override
+  public boolean hasDirectory() {
+    ContainerCheckpointResponseProtoOrBuilder p = viaProto ? proto : builder;
+    return p.hasDirectory();
+  }
+  
+  @Override
+  public String getDirectory() {
+    ContainerCheckpointResponseProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getDirectory();
+  }
+
+  @Override
+  public void setDirectory(String directory) {
+    maybeInitBuilder();
+    this.builder.setDirectory(directory);
+  }
 
   @Override
   public int hashCode() {

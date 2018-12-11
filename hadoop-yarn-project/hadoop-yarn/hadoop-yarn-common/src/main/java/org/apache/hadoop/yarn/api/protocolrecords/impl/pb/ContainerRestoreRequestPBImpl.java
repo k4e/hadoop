@@ -121,6 +121,24 @@ public class ContainerRestoreRequestPBImpl extends ContainerRestoreRequest {
     maybeInitBuilder();
     this.builder.setAddress(address);
   }
+  
+  @Override
+  public boolean hasDirectory() {
+    ContainerRestoreRequestProtoOrBuilder p = viaProto ? proto : builder;
+    return p.hasDirectory();
+  }
+  
+  @Override
+  public String getDirectory() {
+    ContainerRestoreRequestProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getDirectory();
+  }
+
+  @Override
+  public void setDirectory(String directory) {
+    maybeInitBuilder();
+    this.builder.setAddress(directory);
+  }
 
   @Override
   public int hashCode() {

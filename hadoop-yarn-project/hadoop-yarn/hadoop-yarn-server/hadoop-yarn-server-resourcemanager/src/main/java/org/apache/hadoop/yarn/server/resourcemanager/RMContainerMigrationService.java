@@ -156,16 +156,21 @@ public class RMContainerMigrationService extends AbstractService {
     // リストア リクエストを送信する
     ContainerId destinationContainerId = rmDestinationContainer
         .getContainerId();
-    Token destinationContainerToken = rmDestinationContainer.getContainer()
-        .getContainerToken();
-    ContainerRestoreRequest restoreRequest = ContainerRestoreRequest
-        .newInstance(migrationId, destinationContainerId,
-            destinationContainerToken, sourceContainerId, sourceHost);
-    ContainerRestoreResponse restoreResponse =
-        destinationContainerManager.restoreContainer(restoreRequest);
+    ContainerRestoreResponse restoreResponse = null;
+    if (checkpointResponse.getStatus() == ContainerCheckpointResponse.SUCCESS
+        && checkpointResponse.hasDirectory()) {
+      Token destinationContainerToken = rmDestinationContainer.getContainer()
+          .getContainerToken();
+      ContainerRestoreRequest restoreRequest = ContainerRestoreRequest
+          .newInstance(migrationId, destinationContainerId,
+              destinationContainerToken, sourceContainerId, sourceHost,
+              checkpointResponse.getDirectory());
+      restoreResponse = destinationContainerManager.restoreContainer(restoreRequest);
+    }
     // 終了処理を行う
     boolean completing =
-        (checkpointResponse.getStatus() == ContainerCheckpointResponse.SUCCESS
+        (checkpointResponse != null && restoreResponse != null
+        && checkpointResponse.getStatus() == ContainerCheckpointResponse.SUCCESS
         && restoreResponse.getStatus() == ContainerRestoreResponse.SUCCESS);
     ContainerCRFinishRequest sourceFinishRequest = ContainerCRFinishRequest
         .newInstance(migrationId, ContainerCRType.CHECKPOINT,

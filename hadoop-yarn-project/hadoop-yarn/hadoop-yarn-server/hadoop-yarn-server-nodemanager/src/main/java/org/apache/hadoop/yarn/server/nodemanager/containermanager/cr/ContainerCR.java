@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.StopContainersRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointResponsePBImpl;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerLaunchContextPBImpl;
@@ -42,6 +43,7 @@ import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerLaunchContextProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.StopContainerRequestProto;
 import org.apache.hadoop.yarn.server.nodemanager.Context;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerDiagnosticsUpdateEvent;
@@ -56,76 +58,10 @@ import com.google.protobuf.InvalidProtocolBufferException;
 public class ContainerCR extends AbstractService
     implements EventHandler<ContainerCREvent> {
 
-  private final static int DEFAULT_MESSAGE_LISTENER_PORT = 11111;
-  private final static long DEFAULT_TIMEOUT_MS = 60000;
-  private final static long DEFAULT_INTERVAL_MS = 500;
   private final static Logger LOG = LoggerFactory.getLogger(ContainerCR.class);
-  private final static Gson GSON = new Gson();
   private final static String CIMG_DIR = "tmp/cimg";
   private final static String RIMG_DIR = "tmp/rimg";
   private final static String CTX_BIN = "yarn-cr.ctx.bin";
-  private final static String NULL_DIR = "<null>";
-  
-  static class CMessage implements Serializable {
-    
-    private final long id;
-    private final int h;
-    private final boolean sc;
-    private final String dir;
-    
-    public CMessage(long id, int hash, boolean succeeded,
-        String sourceImagesDir) {
-      this.id = id;
-      this.h = hash;
-      this.sc = succeeded;
-      this.dir = sourceImagesDir;
-    }
-    
-    public long getId() { return id; }
-    
-    public int getHash() { return h; }
-    
-    public boolean getSucceeded() { return sc; }
-    
-    public String getSourceImagesDir() { return dir; }
-  }
-  
-  class MessageListener extends Thread {
-    
-    private final ServerSocket serverSocket;
-    public MessageListener(ServerSocket serverSocket) {
-      this.serverSocket = serverSocket;
-    }
-    
-    @Override
-    public void run() {
-      while (true) {
-        Socket sock;
-        try {
-          sock = serverSocket.accept();
-        } catch (SocketTimeoutException e) {
-          continue;
-        } catch (IOException e) {
-          LOG.error(e.toString());
-          return;
-        }
-        CMessage message;
-        try {
-          BufferedReader reader = new BufferedReader(new InputStreamReader(
-              sock.getInputStream()));
-          message = GSON.fromJson(reader, CMessage.class);
-          reader.close();
-        } catch (Exception e) {
-          LOG.error(e.toString());
-          continue;
-        }
-        Pair<Long, Integer> key = Pair.of(message.getId(), message.getHash());
-        String value = (message.getSucceeded()
-            ? message.getSourceImagesDir() : NULL_DIR);
-        sourceImagesDirStore.put(key, value);
-      }
-    }
-  }
   
   class Checkpoint {
     private final Container container;
@@ -188,13 +124,11 @@ public class ContainerCR extends AbstractService
       if (exitValue != 0) {
         throw new CRException(String.format("criu returned %d", exitValue));
       }
-      sendMessage(id, containerId, imagesDir, request.getAddress(),
-          DEFAULT_MESSAGE_LISTENER_PORT);
     }
     
     private void onSuccess(long id, String processId, ContainerId containerId,
         String user, String imagesDir) {
-      setCheckpointResponse(request, ContainerCheckpointResponse.SUCCESS);
+      setCheckpointResponse(request, ContainerCheckpointResponse.SUCCESS, imagesDir);
       String diagnostics = String.format(
           "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: success",
           id, containerId, processId, user, imagesDir);
@@ -204,19 +138,13 @@ public class ContainerCR extends AbstractService
     
     private void onFailure(long id, String processId, ContainerId containerId,
         String user, String imagesDir, String msg) {
-      setCheckpointResponse(request, ContainerCheckpointResponse.FAILURE);
+      setCheckpointResponse(request, ContainerCheckpointResponse.FAILURE, null);
       String diagnostics = String.format(
           "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: failure",
           id, containerId, processId, user, imagesDir);
       LOG.error("ContainerCR.Checkpoint: " + msg);
       dispatcher.getEventHandler().handle(
           new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
-      try {
-        sendMessage(id, containerId, null, request.getAddress(),
-            DEFAULT_MESSAGE_LISTENER_PORT);
-      } catch (IOException e) {
-        LOG.error(e.toString());
-      }
     }
   }
   
@@ -237,7 +165,7 @@ public class ContainerCR extends AbstractService
       String sourceImagesDir = request.getDirectory();
       try {
         if (sourceImagesDir == null) {
-          throw new CRException("request.directory == null");
+          throw new CRException("sourceImagesDir == null");
         }
         String remoteImagesDir = getRemotePath(sourceHost, sourceImagesDir);
         executeInternal(id, destinationContainerId, destinationImagesDir,
@@ -330,11 +258,8 @@ public class ContainerCR extends AbstractService
   private final Dispatcher dispatcher;
   private final String checkpointDirectory;
   private final String restoreDirectory;
-  private final ConcurrentHashMap<Pair<Long, Integer>, String> sourceImagesDirStore;
-  private final ConcurrentHashMap<Pair<Long, Integer>, Integer> checkpointStateStore;
+  private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > checkpointStateStore;
   private final ConcurrentHashMap<Pair<Long, Integer>, Integer> restoreStateStore;
-  private ServerSocket serverSocket = null;
-  private MessageListener messageListener = null;
   
   public ContainerCR(Context nmContext, Dispatcher dispatcher) {
     super(ContainerCR.class.getName());
@@ -349,20 +274,17 @@ public class ContainerCR extends AbstractService
       this.checkpointDirectory = String.format("/%s`", CIMG_DIR);
       this.restoreDirectory = String.format("/%s", RIMG_DIR);
     }
-    this.sourceImagesDirStore = new ConcurrentHashMap<>();
     this.checkpointStateStore = new ConcurrentHashMap<>();
     this.restoreStateStore = new ConcurrentHashMap<>();
   }
   
   @Override
   public void serviceStart() throws Exception {
-    startMessageListener();
     super.serviceStart();
   }
   
   @Override
   public void serviceStop() throws Exception {
-    stopMessageListener();
     super.serviceStop();
   }
   
@@ -386,12 +308,20 @@ public class ContainerCR extends AbstractService
       ContainerCheckpointRequest request, boolean failureIfNull) {
     long id = request.getId();
     Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
-    Integer status = this.checkpointStateStore.get(key);
-    if (status == null && failureIfNull) {
-      status = ContainerCheckpointResponse.FAILURE;
+    Pair<Integer, String> value = this.checkpointStateStore.get(key);
+    int status = ContainerCheckpointResponse.FAILURE;
+    String directory = null;
+    if (value != null) {
+      status = value.getLeft();
+      directory = value.getRight();
     }
-    if (status != null) {
-      return ContainerCheckpointResponse.newInstance(id, status);
+    if (value != null || failureIfNull) {
+      ContainerCheckpointResponse response = ContainerCheckpointResponse
+          .newInstance(id, status);
+      if (directory != null) {
+        response.setDirectory(directory);
+      }
+      return response;
     } else {
       return null;
     }
@@ -412,43 +342,8 @@ public class ContainerCR extends AbstractService
     }
   }
   
-  private void startMessageListener() throws IOException, InterruptedException {
-    if (isMessageListenerAlive()) {
-      stopMessageListener();
-    }
-    this.serverSocket = new ServerSocket(DEFAULT_MESSAGE_LISTENER_PORT);
-    this.messageListener = new MessageListener(this.serverSocket);
-    this.messageListener.start();
-  }
-  
-  private void stopMessageListener() throws IOException, InterruptedException {
-    if (this.serverSocket != null) {
-      this.serverSocket.close();
-    }
-    if (this.messageListener != null) {
-      this.messageListener.join(1000);
-      if (this.messageListener.isAlive()) {
-        this.messageListener.destroy();
-      }
-    }
-    this.serverSocket = null;
-    this.messageListener = null;
-  }
-  
-  private boolean isMessageListenerAlive() {
-    return this.serverSocket != null && this.messageListener != null
-        && this.messageListener.isAlive();
-  }
-  
   private void checkpointAndTransport(Container container, String processId,
       ContainerCheckpointRequest request) {
-    if (!isMessageListenerAlive()) {
-      try {
-        startMessageListener();
-      } catch (Exception e) {
-        LOG.error(e.toString());
-      }
-    }
     Checkpoint checkpoint = new Checkpoint(
         container, processId, request);
     checkpoint.execute();
@@ -460,10 +355,11 @@ public class ContainerCR extends AbstractService
   }
   
   private void setCheckpointResponse(ContainerCheckpointRequest request,
-      int status) {
+      int status, String directory) {
     Pair<Long, Integer> key = Pair.of(
         request.getId(), request.getContainerId().hashCode());
-    this.checkpointStateStore.put(key, status);
+    Pair<Integer, String> value = Pair.of(status, directory);
+    this.checkpointStateStore.put(key, value);
   }
   
   private void setRestoreResponse(ContainerRestoreRequest request,
@@ -494,43 +390,5 @@ public class ContainerCR extends AbstractService
   private boolean makeDirectory(String path) {
     File dir = new File(path);
     return (dir.isDirectory() || dir.mkdirs());
-  }
-  
-  private void sendMessage(long id, ContainerId containerId, String imagesDir,
-      String host, int port) throws IOException {
-    int hash = containerId.hashCode();
-    CMessage cmessage;
-    if (imagesDir != null) {
-      cmessage = new CMessage(id, hash, true, imagesDir);
-    } else {
-      cmessage = new CMessage(id, hash, false, NULL_DIR);
-    }
-    String json = GSON.toJson(cmessage);
-    Socket socket = null;
-    try {
-      socket = new Socket(host, port);
-      BufferedWriter writer = new BufferedWriter(
-          new OutputStreamWriter(socket.getOutputStream()));
-      writer.write(json);
-    } finally {
-      if (socket != null) {
-        socket.close();
-      }
-    }
-  }
-  
-  private String obtainSourceImagesDir(long id, ContainerId sourceContainerId)
-      throws Exception {
-    int hash = sourceContainerId.hashCode();
-    Pair<Long, Integer> key = Pair.of(id, hash);
-    long start = System.currentTimeMillis();
-    while (System.currentTimeMillis() - start <= DEFAULT_TIMEOUT_MS) {
-      String s = sourceImagesDirStore.get(key);
-      if (s != null) {
-        return (NULL_DIR.equals(s) ? null : s);
-      }
-      Thread.sleep(DEFAULT_INTERVAL_MS);
-    }
-    throw new Exception("Timeout getting message");
   }
 }

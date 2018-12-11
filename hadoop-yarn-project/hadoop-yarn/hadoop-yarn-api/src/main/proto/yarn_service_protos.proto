@@ -422,6 +422,7 @@ message ContainerCheckpointRequestProto {
 message ContainerCheckpointResponseProto {
   required int64 id = 1;
   required int32 status = 2;
+  optional string directory = 3;
 }
 
 message ContainerRestoreRequestProto {
@@ -430,6 +431,7 @@ message ContainerRestoreRequestProto {
   required hadoop.common.TokenProto container_token = 3;
   required ContainerIdProto source_container_id = 4;
   required string address = 5;
+  required string directory = 6;
 }
 
 message ContainerRestoreResponseProto {

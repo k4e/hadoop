@@ -37,4 +37,16 @@ public abstract class ContainerCheckpointResponse {
   @Public
   @Unstable
   public abstract void setStatus(int status);
+
+  @Public
+  @Unstable
+  public abstract boolean hasDirectory();
+  
+  @Public
+  @Unstable
+  public abstract String getDirectory();
+  
+  @Public
+  @Unstable
+  public abstract void setDirectory(String directory);
 }
