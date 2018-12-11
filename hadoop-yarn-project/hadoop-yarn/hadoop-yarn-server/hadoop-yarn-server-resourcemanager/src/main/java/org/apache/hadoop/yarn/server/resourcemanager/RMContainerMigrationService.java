@@ -21,6 +21,8 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRType;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
@@ -161,8 +163,21 @@ public class RMContainerMigrationService extends AbstractService {
             destinationContainerToken, sourceContainerId, sourceHost);
     ContainerRestoreResponse restoreResponse =
         destinationContainerManager.restoreContainer(restoreRequest);
-    // TODO 終了処理を記述する
-    
+    // 終了処理を行う
+    boolean completing =
+        (checkpointResponse.getStatus() == ContainerCheckpointResponse.SUCCESS
+        && restoreResponse.getStatus() == ContainerRestoreResponse.SUCCESS);
+    ContainerCRFinishRequest sourceFinishRequest = ContainerCRFinishRequest
+        .newInstance(migrationId, ContainerCRType.CHECKPOINT,
+            sourceContainerId, destinationContainerId, completing);
+    ContainerCRFinishRequest destinationFinishRequest = ContainerCRFinishRequest
+        .newInstance(migrationId, ContainerCRType.RESTORE,
+            sourceContainerId, destinationContainerId, completing);
+    if (completing) {
+      // TODO 成功時の後処理
+    }
+    sourceContainerManager.crFinish(sourceFinishRequest);
+    destinationContainerManager.crFinish(destinationFinishRequest);
   }
   
   public boolean isWaitingAllocation() {
