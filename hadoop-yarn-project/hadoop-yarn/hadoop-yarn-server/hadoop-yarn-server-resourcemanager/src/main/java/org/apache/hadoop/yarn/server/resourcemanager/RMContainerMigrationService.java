@@ -20,6 +20,7 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
@@ -41,6 +42,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Allocation;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ContainerUpdates;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 
 public class RMContainerMigrationService extends AbstractService {
@@ -68,12 +70,14 @@ public class RMContainerMigrationService extends AbstractService {
   void move(RMContainer rmSourceContainer, RMNode rmSourceNode,
       RMNode rmDestinationNode) throws YarnException, IOException {
     long migrationId = this.countMigration.getAndIncrement();
-    ApplicationAttemptId applicationAttemptId = rmSourceContainer.getApplicationAttemptId();
+    ApplicationAttemptId applicationAttemptId =
+        rmSourceContainer.getApplicationAttemptId();
     Container sourceContainer = rmSourceContainer.getContainer();
     ContainerId sourceContainerId = rmSourceContainer.getContainerId();
     long migrationAttempt;
     synchronized (migrationAttempts) {
-      migrationAttempt = migrationAttempts.getOrDefault(applicationAttemptId, 0L);
+      migrationAttempt = migrationAttempts.getOrDefault(
+          applicationAttemptId, 0L);
       migrationAttempts.put(applicationAttemptId, migrationAttempt + 1L);
     }
     long allocationId = BASE_ALLOCATION_ID + migrationAttempt;
@@ -85,27 +89,36 @@ public class RMContainerMigrationService extends AbstractService {
     Priority priority = sourceContainer.getPriority();
     Resource capability = sourceContainer.getResource();
     ExecutionType execType = sourceContainer.getExecutionType();
-    ResourceRequest nodeLevelRequest = ResourceRequest.newInstance(priority, destinationHost, capability, 1, false);
+    ResourceRequest nodeLevelRequest = ResourceRequest.newInstance(
+        priority, destinationHost, capability, 1, false);
     nodeLevelRequest.setAllocationRequestId(allocationId);
-    nodeLevelRequest.setExecutionTypeRequest(ExecutionTypeRequest.newInstance(execType, true));
-    ResourceRequest rackLevelRequest = ResourceRequest.newInstance(priority, destinationRack, capability, 1, false);
+    nodeLevelRequest.setExecutionTypeRequest(
+        ExecutionTypeRequest.newInstance(execType, true));
+    ResourceRequest rackLevelRequest = ResourceRequest.newInstance(
+        priority, destinationRack, capability, 1, false);
     rackLevelRequest.setAllocationRequestId(allocationId);
-    rackLevelRequest.setExecutionTypeRequest(ExecutionTypeRequest.newInstance(execType, true));
-    ResourceRequest anyLevelRequest = ResourceRequest.newInstance(priority, ResourceRequest.ANY, capability, 1, false);
+    rackLevelRequest.setExecutionTypeRequest(
+        ExecutionTypeRequest.newInstance(execType, true));
+    ResourceRequest anyLevelRequest = ResourceRequest.newInstance(
+        priority, ResourceRequest.ANY, capability, 1, false);
     anyLevelRequest.setAllocationRequestId(allocationId);
-    anyLevelRequest.setExecutionTypeRequest(ExecutionTypeRequest.newInstance(execType, true));
-    List<ResourceRequest> ask = Arrays.asList(nodeLevelRequest, rackLevelRequest, anyLevelRequest);
+    anyLevelRequest.setExecutionTypeRequest(
+        ExecutionTypeRequest.newInstance(execType, true));
+    List<ResourceRequest> ask = Arrays.asList(
+        nodeLevelRequest, rackLevelRequest, anyLevelRequest);
     LOG.info(ask);
-    this.rmContext.getScheduler().allocate(
-        applicationAttemptId, new ArrayList<ResourceRequest>(ask), null, new ArrayList<ContainerId>(), null, null,
-        new ContainerUpdates());
-    Pair<ApplicationAttemptId, Long> waitingContainer = Pair.of(applicationAttemptId, Long.valueOf(allocationId));
+    Allocation allocation = this.rmContext.getScheduler().allocate(
+        applicationAttemptId, new ArrayList<ResourceRequest>(ask), null,
+        new ArrayList<ContainerId>(), null, null, new ContainerUpdates());
+    Pair<ApplicationAttemptId, Long> waitingContainer = Pair.of(
+        applicationAttemptId, Long.valueOf(allocationId));
     this.waitingContainers.add(waitingContainer);
     RMContainer rmDestinationContainer = null;
     for (int t = 0; t < RETRY_LIMIT && rmDestinationContainer == null; ++t) {
       ContainerId containerId = this.allocatedContainers.get(waitingContainer);
       if(containerId != null) {
-        rmDestinationContainer = this.rmContext.getScheduler().getRMContainer(containerId);
+        rmDestinationContainer = this.rmContext.getScheduler()
+            .getRMContainer(containerId);
         break;
       }
       try {
@@ -128,19 +141,26 @@ public class RMContainerMigrationService extends AbstractService {
     // 2 つのノードの ContainerManager プロキシを取得
     NodeId sourceNodeId = rmSourceNode.getNodeID();
     NodeId destinationNodeId = rmDestinationNode.getNodeID();
-    ContainerManagementProtocol sourceContainerManager = getContainerMgrProxy(sourceNodeId, applicationAttemptId);
-    ContainerManagementProtocol destinationContainerManager = getContainerMgrProxy(
-        destinationNodeId, applicationAttemptId);
+    ContainerManagementProtocol sourceContainerManager
+        = getContainerMgrProxy(sourceNodeId, applicationAttemptId);
+    ContainerManagementProtocol destinationContainerManager
+        = getContainerMgrProxy(destinationNodeId, applicationAttemptId);
     // チェックポイント リクエストを送信する
     ContainerCheckpointRequest checkpointRequest =
-        ContainerCheckpointRequest.newInstance(migrationId, sourceContainerId, destinationHost);
-    ContainerCheckpointResponse checkpointResponse = sourceContainerManager.checkpointContainer(checkpointRequest);
+        ContainerCheckpointRequest.newInstance(migrationId, sourceContainerId,
+        destinationHost);
+    ContainerCheckpointResponse checkpointResponse =
+        sourceContainerManager.checkpointContainer(checkpointRequest);
     // リストア リクエストを送信する
-    ContainerId destinationContainerId = rmDestinationContainer.getContainerId();
-    Token destinationContainerToken = rmDestinationContainer.getContainer().getContainerToken();
-    ContainerRestoreRequest restoreRequest = ContainerRestoreRequest.newInstance(
-        migrationId, destinationContainerId, destinationContainerToken, sourceContainerId, sourceHost);
-    ContainerRestoreResponse restoreResponse = destinationContainerManager.restoreContainer(restoreRequest);
+    ContainerId destinationContainerId = rmDestinationContainer
+        .getContainerId();
+    Token destinationContainerToken = rmDestinationContainer.getContainer()
+        .getContainerToken();
+    ContainerRestoreRequest restoreRequest = ContainerRestoreRequest
+        .newInstance(migrationId, destinationContainerId,
+            destinationContainerToken, sourceContainerId, sourceHost);
+    ContainerRestoreResponse restoreResponse =
+        destinationContainerManager.restoreContainer(restoreRequest);
     // TODO 終了処理を記述する
     
   }
@@ -152,7 +172,8 @@ public class RMContainerMigrationService extends AbstractService {
   public void notifyAllocation(ApplicationAttemptId appAttemptId, Allocation allocation) {
     for (Container container : allocation.getContainers()) {
       long allocReqId = container.getAllocationRequestId();
-      Pair<ApplicationAttemptId, Long> key = Pair.of(appAttemptId, Long.valueOf(allocReqId));
+      Pair<ApplicationAttemptId, Long> key = Pair.of(
+          appAttemptId, Long.valueOf(allocReqId));
       if (allocReqId != -1) {
         if(this.waitingContainers.remove(key)) {
           ContainerId containerId = container.getId();
@@ -164,14 +185,17 @@ public class RMContainerMigrationService extends AbstractService {
   
   private ContainerManagementProtocol getContainerMgrProxy(NodeId nodeId,
       ApplicationAttemptId attemptId) throws IOException {
-    InetSocketAddress address = NetUtils.createSocketAddrForHost(nodeId.getHost(), nodeId.getPort());
+    InetSocketAddress address = NetUtils
+        .createSocketAddrForHost(nodeId.getHost(), nodeId.getPort());
     YarnRPC rpc = getYarnRPC();
     UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
-    String user = rmContext.getRMApps().get(attemptId.getApplicationId()).getUser();
-    Token token = rmContext.getNMTokenSecretManager().createNMToken(attemptId, nodeId, user);
+    String user = rmContext.getRMApps().get(attemptId.getApplicationId())
+        .getUser();
+    Token token = rmContext.getNMTokenSecretManager().createNMToken(
+        attemptId, nodeId, user);
     currentUser.addToken(ConverterUtils.convertFromYarn(token, address));
-    return NMProxy.createNMProxy(
-        rmContext.getYarnConfiguration(), ContainerManagementProtocol.class, currentUser, rpc, address);
+    return NMProxy.createNMProxy(rmContext.getYarnConfiguration(),
+        ContainerManagementProtocol.class, currentUser, rpc, address);
   }
   
   private YarnRPC getYarnRPC() {

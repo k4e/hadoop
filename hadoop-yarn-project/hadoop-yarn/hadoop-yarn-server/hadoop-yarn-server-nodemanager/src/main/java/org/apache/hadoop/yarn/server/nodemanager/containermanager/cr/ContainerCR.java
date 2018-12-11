@@ -12,15 +12,21 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Serializable;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
@@ -29,6 +35,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointResponsePBImpl;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerLaunchContextPBImpl;
 import org.apache.hadoop.yarn.event.Dispatcher;
@@ -46,7 +53,8 @@ import com.github.fracpete.rsync4j.RSync;
 import com.google.gson.Gson;
 import com.google.protobuf.InvalidProtocolBufferException;
 
-public class ContainerCR extends AbstractService implements EventHandler<ContainerCREvent> {
+public class ContainerCR extends AbstractService
+    implements EventHandler<ContainerCREvent> {
 
   private final static int DEFAULT_MESSAGE_LISTENER_PORT = 11111;
   private final static long DEFAULT_TIMEOUT_MS = 60000;
@@ -95,7 +103,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
         }
         CMessage message;
         try {
-          BufferedReader reader = new BufferedReader(new InputStreamReader(sock.getInputStream()));
+          BufferedReader reader = new BufferedReader(new InputStreamReader(
+              sock.getInputStream()));
           message = GSON.fromJson(reader, CMessage.class);
           reader.close();
         } catch (Exception e) {
@@ -103,7 +112,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
           continue;
         }
         Pair<Long, Integer> key = Pair.of(message.getId(), message.getHash());
-        String value = (message.getSucceeded() ? message.getSourceImagesDir() : NULL_DIR);
+        String value = (message.getSucceeded()
+            ? message.getSourceImagesDir() : NULL_DIR);
         sourceImagesDirStore.put(key, value);
       }
     }
@@ -114,9 +124,11 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     private final ContainerId containerId;
     private final String processId;
     private final ContainerCheckpointRequest request;
-    public CheckpointAndTransport(Container container, String processId, ContainerCheckpointRequest request) {
+    public CheckpointAndTransport(Container container, String processId,
+        ContainerCheckpointRequest request) {
       this.container = container;
-      this.containerId = container.getContainerTokenIdentifier().getContainerID();
+      this.containerId = container.getContainerTokenIdentifier()
+          .getContainerID();
       this.processId = processId;
       this.request = request;
     }
@@ -128,10 +140,13 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
         onFailure(id, String.format("Make directory % failed", imagesDir));
         return;
       }
-      ContainerLaunchContextProto ctxProto = ((ContainerLaunchContextPBImpl)container.getLaunchContext()).getProto();
+      ContainerLaunchContextProto ctxProto =
+          ((ContainerLaunchContextPBImpl)container.getLaunchContext())
+          .getProto();
       try {
         String ctxBinPath = getPath(imagesDir, CTX_BIN);
-        BufferedOutputStream ctxFileOut = new BufferedOutputStream(new FileOutputStream(ctxBinPath));
+        BufferedOutputStream ctxFileOut = new BufferedOutputStream(
+            new FileOutputStream(ctxBinPath));
         ctxFileOut.write(ctxProto.toByteArray());
         ctxFileOut.close();
       } catch (IOException e) {
@@ -139,12 +154,14 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
         return;
       }
       ProcessBuilder processBuilder = new ProcessBuilder(
-          "criu", "dump", "--tree", processId, "--images-dir", imagesDir, "--leave-stopped", "--shell-job");
+          "criu", "dump", "--tree", processId, "--images-dir", imagesDir,
+          "--leave-stopped", "--shell-job");
       processBuilder.redirectErrorStream(true);
       int exitValue;
       try {
         Process process = processBuilder.start();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(
+            process.getInputStream()));
         String line;
         while ((line = reader.readLine()) != null) {
           LOG.info("criu dump: " + line);
@@ -161,7 +178,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
         return;
       }
       try {
-        sendMessage(id, containerId, imagesDir, request.getAddress(), DEFAULT_MESSAGE_LISTENER_PORT);
+        sendMessage(id, containerId, imagesDir, request.getAddress(),
+            DEFAULT_MESSAGE_LISTENER_PORT);
       } catch (IOException e) {
         onFailure(id, e.toString());
         return;
@@ -172,9 +190,11 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
       onCheckpointSuccess(id, processId, container.getUser(), containerId);
     }
     private void onFailure(long id, String msg) {
-      onCheckpointFailure(id, msg, processId, container.getUser(), containerId);
+      onCheckpointFailure(id, msg, processId, container.getUser(),
+          containerId);
       try {
-        sendMessage(id, containerId, null, request.getAddress(), DEFAULT_MESSAGE_LISTENER_PORT);
+        sendMessage(id, containerId, null, request.getAddress(),
+            DEFAULT_MESSAGE_LISTENER_PORT);
       } catch (IOException e) {
         LOG.error(e.toString());
       }
@@ -189,7 +209,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     @Override
     public void run() {
       long id = request.getId();
-      String imagesDir = getImagesDir(restoreDirectory, request.getSourceContainerId(), id);
+      String imagesDir = getImagesDir(restoreDirectory,
+          request.getSourceContainerId(), id);
       String remoteImagesDir;
       try {
         remoteImagesDir = obtainSourceImagesDir(id, request.getSourceContainerId());
@@ -201,7 +222,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
         onFailure(id, "Remote source images dir is null");
         return;
       }
-      RSync rsync = new RSync().source(remoteImagesDir).destination(imagesDir).archive(true).delete(true);
+      RSync rsync = new RSync().source(remoteImagesDir).destination(imagesDir)
+          .archive(true).delete(true);
       try {
         CollectingProcessOutput rsyncOut = rsync.execute();
         LOG.info("rsync: " + rsyncOut.getStdOut());
@@ -216,7 +238,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
       ByteArrayOutputStream ctxByteOut = new ByteArrayOutputStream();
       try {
         String ctxBinPath = getPath(imagesDir, CTX_BIN);
-        BufferedInputStream ctxFileIn = new BufferedInputStream(new FileInputStream(ctxBinPath));
+        BufferedInputStream ctxFileIn = new BufferedInputStream(
+            new FileInputStream(ctxBinPath));
         int data;
         while ((data = ctxFileIn.read()) >= 0) {
           ctxByteOut.write(data);
@@ -228,19 +251,21 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
       }
       ContainerLaunchContextProto ctxProto;
       try {
-        ctxProto = ContainerLaunchContextProto.parseFrom(ctxByteOut.toByteArray());
+        ctxProto = ContainerLaunchContextProto
+            .parseFrom(ctxByteOut.toByteArray());
       } catch (InvalidProtocolBufferException e) {
         onFailure(id, e.toString());
         return;
       }
-      ContainerLaunchContextPBImpl ctx = new ContainerLaunchContextPBImpl(ctxProto);
+      ContainerLaunchContextPBImpl ctx = new ContainerLaunchContextPBImpl(
+          ctxProto);
       List<String> commands = Collections.singletonList(String.format(
           "criu restore --images-dir %d --restore-sibling", imagesDir));
       ctx.setCommands(commands);
-      StartContainerRequest startContainerRequest = StartContainerRequest.newInstance(
-          ctx, request.getContainerToken());
-      StartContainersRequest startContainersRequest = StartContainersRequest.newInstance(
-          Collections.singletonList(startContainerRequest));
+      StartContainerRequest startContainerRequest = StartContainerRequest
+          .newInstance(ctx, request.getContainerToken());
+      StartContainersRequest startContainersRequest = StartContainersRequest
+          .newInstance(Collections.singletonList(startContainerRequest));
       try {
         nmContext.getContainerManager().startContainers(startContainersRequest);
       } catch (YarnException | IOException e) {
@@ -250,10 +275,12 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
       onSuccess(id);
     }
     private void onSuccess(long id) {
-      onRestoreSuccess(id, request.getContainerId(), request.getSourceContainerId());
+      onRestoreSuccess(id,
+          request.getContainerId(), request.getSourceContainerId());
     }
     private void onFailure(long id, String msg) {
-      onRestoreFailure(id, msg, request.getContainerId(), request.getSourceContainerId());
+      onRestoreFailure(id, msg, 
+          request.getContainerId(), request.getSourceContainerId());
     }
   }
   
@@ -301,9 +328,10 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
   public void handle(ContainerCREvent event) {
     switch (event.getType()) {
     case CHECKPOINT:
-      ContainerCRCheckpointEvent checkpointEvent = (ContainerCRCheckpointEvent)event;
-      checkpointAndTransport(
-          checkpointEvent.getContainer(), checkpointEvent.getProcessId(), checkpointEvent.getRequest());
+      ContainerCRCheckpointEvent checkpointEvent =
+          (ContainerCRCheckpointEvent)event;
+      checkpointAndTransport(checkpointEvent.getContainer(),
+          checkpointEvent.getProcessId(), checkpointEvent.getRequest());
       break;
     case RESTORE:
       ContainerCRRestoreEvent restoreEvent = (ContainerCRRestoreEvent)event;
@@ -312,7 +340,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     }
   }
   
-  public ContainerCheckpointResponse getCheckpointResponse(ContainerCheckpointRequest request, boolean failureIfNull) {
+  public ContainerCheckpointResponse getCheckpointResponse(
+      ContainerCheckpointRequest request, boolean failureIfNull) {
     long id = request.getId();
     Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
     Integer status = this.checkpointStateStore.get(key);
@@ -326,7 +355,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     }
   }
   
-  public ContainerRestoreResponse getRestoreResponse(ContainerRestoreRequest request, boolean failureIfNull) {
+  public ContainerRestoreResponse getRestoreResponse(
+      ContainerRestoreRequest request, boolean failureIfNull) {
     long id = request.getId();
     Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
     Integer status = this.restoreStateStore.get(key);
@@ -399,12 +429,15 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     }
   }
   
-  private void setCheckpointResponse(ContainerCheckpointRequest request, int status) {
-    Pair<Long, Integer> key = Pair.of(request.getId(), request.getContainerId().hashCode());
+  private void setCheckpointResponse(ContainerCheckpointRequest request,
+      int status) {
+    Pair<Long, Integer> key = Pair.of(
+        request.getId(), request.getContainerId().hashCode());
     this.checkpointStateStore.put(key, status);
   }
   
-  private void setRestoreResponse(ContainerRestoreRequest request, int state) {
+  private void setRestoreResponse(ContainerRestoreRequest request,
+      int state) {
     Pair<Long, Integer> key = Pair.of(
         request.getId(), request.getContainerId().hashCode());
     this.restoreStateStore.put(key, state);
@@ -418,8 +451,10 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     return StringUtils.stripEnd(p, "/") + sb.toString();
   }
   
-  private String getImagesDir(String imagesHome, ContainerId containerId, long id) {
-    return getPath(imagesHome, containerId.toString(), Long.valueOf(id).toString());
+  private String getImagesDir(String imagesHome, ContainerId containerId,
+      long id) {
+    return getPath(
+        imagesHome, containerId.toString(), Long.valueOf(id).toString());
   }
   
   private boolean makeDirectory(String path) {
@@ -427,8 +462,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     return (dir.isDirectory() || dir.mkdirs());
   }
   
-  private void sendMessage(long id, ContainerId containerId, String imagesDir, String host, int port)
-      throws IOException {
+  private void sendMessage(long id, ContainerId containerId, String imagesDir,
+      String host, int port) throws IOException {
     int hash = containerId.hashCode();
     CMessage cmessage;
     if (imagesDir != null) {
@@ -440,7 +475,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     Socket socket = null;
     try {
       socket = new Socket(host, port);
-      BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+      BufferedWriter writer = new BufferedWriter(
+          new OutputStreamWriter(socket.getOutputStream()));
       writer.write(json);
     } finally {
       if (socket != null) {
@@ -449,7 +485,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     }
   }
   
-  private String obtainSourceImagesDir(long id, ContainerId sourceContainerId) throws Exception {
+  private String obtainSourceImagesDir(long id, ContainerId sourceContainerId)
+      throws Exception {
     int hash = sourceContainerId.hashCode();
     Pair<Long, Integer> key = Pair.of(id, hash);
     long start = System.currentTimeMillis();
@@ -463,11 +500,13 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
     throw new Exception("Timeout getting message");
   }
 
-  private void onCheckpointSuccess(long id, String processId, String user, ContainerId containerId) {
+  private void onCheckpointSuccess(long id, String processId, String user,
+      ContainerId containerId) {
     String diagnostics = String.format(
         "Checkpointed process %s as user %s for container %s into %s, result = success",
         processId, user, containerId.toString());
-    dispatcher.getEventHandler().handle(new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
+    dispatcher.getEventHandler().handle(
+        new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
   }
   
   private void onCheckpointFailure(long id, String msg, String processId,
@@ -476,14 +515,18 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
         "Checkpointed process %s as user %s for container %s, result = failure",
         processId, user, containerId.toString());
     LOG.error("CheckpointAndTransport: " + msg);
-    dispatcher.getEventHandler().handle(new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
+    dispatcher.getEventHandler().handle(
+        new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
   }
 
-  private void onRestoreSuccess(long id, ContainerId destinationContainerId, ContainerId sourceContainerId) {
+  private void onRestoreSuccess(long id, ContainerId destinationContainerId,
+      ContainerId sourceContainerId) {
     String diagnostics = String.format(
         "Restored container as %s from source container %s, result = success",
         destinationContainerId.toString(), sourceContainerId.toString());
-    dispatcher.getEventHandler().handle(new ContainerDiagnosticsUpdateEvent(destinationContainerId, diagnostics));
+    dispatcher.getEventHandler().handle(
+        new ContainerDiagnosticsUpdateEvent(
+            destinationContainerId, diagnostics));
   }
   
   private void onRestoreFailure(long id, String msg,
@@ -492,6 +535,8 @@ public class ContainerCR extends AbstractService implements EventHandler<Contain
         "Restored container as %s from source container %s, result = failure",
         destinationContainerId.toString(), sourceContainerId.toString());
     LOG.error("RestoreByTransport: " + msg);
-    dispatcher.getEventHandler().handle(new ContainerDiagnosticsUpdateEvent(destinationContainerId, diagnostics));
+    dispatcher.getEventHandler().handle(
+        new ContainerDiagnosticsUpdateEvent(
+            destinationContainerId, diagnostics));
   }
 }
