@@ -21,6 +21,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRType;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
@@ -189,7 +190,8 @@ public class RMContainerMigrationService extends AbstractService {
     return !this.waitingContainers.isEmpty();
   }
   
-  public void notifyAllocation(ApplicationAttemptId appAttemptId, Allocation allocation) {
+  public void notifyAllocation(ApplicationAttemptId appAttemptId,
+      Allocation allocation) {
     for (Container container : allocation.getContainers()) {
       long allocReqId = container.getAllocationRequestId();
       Pair<ApplicationAttemptId, Long> key = Pair.of(
@@ -201,6 +203,20 @@ public class RMContainerMigrationService extends AbstractService {
         }
       }
     }
+  }
+  
+  public void removeMigratingContainersFromAllocateResponse(
+      ApplicationAttemptId appAttemptId, AllocateResponse response) {
+    ArrayList<Container> containers = new ArrayList<>(
+        response.getAllocatedContainers());
+    synchronized (this.allocatedContainers) {
+      containers.removeIf((c) -> {
+        Pair<ApplicationAttemptId, Long> key = Pair.of(
+            appAttemptId, c.getAllocationRequestId());
+        return this.allocatedContainers.containsKey(key);
+      });
+    }
+    response.setAllocatedContainers(containers);
   }
   
   private ContainerManagementProtocol getContainerMgrProxy(NodeId nodeId,

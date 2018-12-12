@@ -466,6 +466,8 @@ public class ApplicationMasterService extends AbstractService implements
        */
       response.setResponseId(getNextResponseId(lastResponse.getResponseId()));
       lock.setAllocateResponse(response);
+      rmContext.getRMContainerMigrationService()
+          .removeMigratingContainersFromAllocateResponse(appAttemptId, response);
       return response;
     }
   }

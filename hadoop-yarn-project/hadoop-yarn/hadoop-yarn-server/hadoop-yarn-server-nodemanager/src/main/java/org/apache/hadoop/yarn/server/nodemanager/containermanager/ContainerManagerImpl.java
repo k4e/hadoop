@@ -1950,8 +1950,8 @@ public class ContainerManagerImpl extends CompositeService implements
         containerId.toString()));
     this.dispatcher.getEventHandler().handle(
         new CheckpointContainersLauncherEvent(container, request));
-    ContainerCheckpointResponse response = this.containerCR
-        .getCheckpointResponse(request, true);
+    ContainerCheckpointResponse response =
+        this.containerCR.getCheckpointResponse(request);
     LOG.info(String.format(
         "Completed container checkpoint (containerId=%s, status=%d)",
         containerId.toString(), response.getStatus()));
@@ -1967,8 +1967,8 @@ public class ContainerManagerImpl extends CompositeService implements
         containerId.toString()));
     this.dispatcher.getEventHandler().handle(
         new ContainerCRRestoreEvent(request));
-    ContainerRestoreResponse response = this.containerCR
-        .getRestoreResponse(request, true);
+    ContainerRestoreResponse response =
+        this.containerCR.getRestoreResponse(request);
     LOG.info(String.format(
         "Completed container restore (containerId=%s, status=%d)",
         containerId.toString(), response.getStatus()));
@@ -1979,6 +1979,6 @@ public class ContainerManagerImpl extends CompositeService implements
   public ContainerCRFinishResponse crFinish(ContainerCRFinishRequest request)
       throws YarnException, IOException {
     // TODO
-    return null;
+    return ContainerCRFinishResponse.newInstance();
   }
 }

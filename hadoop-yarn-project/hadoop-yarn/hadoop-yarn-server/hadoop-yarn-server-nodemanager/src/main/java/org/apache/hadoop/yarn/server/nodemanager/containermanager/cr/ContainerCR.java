@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 
@@ -62,6 +63,7 @@ public class ContainerCR extends AbstractService
   private final static String CIMG_DIR = "tmp/cimg";
   private final static String RIMG_DIR = "tmp/rimg";
   private final static String CTX_BIN = "yarn-cr.ctx.bin";
+  private final static long WAIT_TIMEOUT_MS = 30000;
   
   class Checkpoint {
     private final Container container;
@@ -258,8 +260,8 @@ public class ContainerCR extends AbstractService
   private final Dispatcher dispatcher;
   private final String checkpointDirectory;
   private final String restoreDirectory;
-  private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > checkpointStateStore;
-  private final ConcurrentHashMap<Pair<Long, Integer>, Integer> restoreStateStore;
+  private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > checkpointStatusStore;
+  private final ConcurrentHashMap<Pair<Long, Integer>, Integer> restoreStatusStore;
   
   public ContainerCR(Context nmContext, Dispatcher dispatcher) {
     super(ContainerCR.class.getName());
@@ -274,8 +276,8 @@ public class ContainerCR extends AbstractService
       this.checkpointDirectory = String.format("/%s`", CIMG_DIR);
       this.restoreDirectory = String.format("/%s", RIMG_DIR);
     }
-    this.checkpointStateStore = new ConcurrentHashMap<>();
-    this.restoreStateStore = new ConcurrentHashMap<>();
+    this.checkpointStatusStore = new ConcurrentHashMap<>();
+    this.restoreStatusStore = new ConcurrentHashMap<>();
   }
   
   @Override
@@ -294,62 +296,57 @@ public class ContainerCR extends AbstractService
     case CHECKPOINT:
       ContainerCRCheckpointEvent checkpointEvent =
           (ContainerCRCheckpointEvent)event;
-      checkpointAndTransport(checkpointEvent.getContainer(),
+      executeCheckpoint(checkpointEvent.getContainer(),
           checkpointEvent.getProcessId(), checkpointEvent.getRequest());
       break;
     case RESTORE:
       ContainerCRRestoreEvent restoreEvent = (ContainerCRRestoreEvent)event;
-      restoreByTransport(restoreEvent.getRestoreRequest());
+      executeRestore(restoreEvent.getRestoreRequest());
       break;
     }
   }
   
   public ContainerCheckpointResponse getCheckpointResponse(
-      ContainerCheckpointRequest request, boolean failureIfNull) {
+      ContainerCheckpointRequest request) {
     long id = request.getId();
     Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
-    Pair<Integer, String> value = this.checkpointStateStore.get(key);
-    int status = ContainerCheckpointResponse.FAILURE;
-    String directory = null;
+    Pair<Integer, String> value = waitAndGet(key, this.checkpointStatusStore);
+    int status;
+    String directory;
     if (value != null) {
       status = value.getLeft();
       directory = value.getRight();
-    }
-    if (value != null || failureIfNull) {
-      ContainerCheckpointResponse response = ContainerCheckpointResponse
-          .newInstance(id, status);
-      if (directory != null) {
-        response.setDirectory(directory);
-      }
-      return response;
     } else {
-      return null;
+      status = ContainerCheckpointResponse.FAILURE;
+      directory = null;
     }
+    ContainerCheckpointResponse response = ContainerCheckpointResponse
+        .newInstance(id, status);
+    if (directory != null) {
+      response.setDirectory(directory);
+    }
+    return response;
   }
   
   public ContainerRestoreResponse getRestoreResponse(
-      ContainerRestoreRequest request, boolean failureIfNull) {
+      ContainerRestoreRequest request) {
     long id = request.getId();
     Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
-    Integer status = this.restoreStateStore.get(key);
-    if (status == null && failureIfNull) {
+    Integer status = waitAndGet(key, this.restoreStatusStore);
+    if (status == null) {
       status = ContainerRestoreResponse.FAILURE;
     }
-    if (status != null) {
-      return ContainerRestoreResponse.newInstance(id, status);
-    } else {
-      return null;
-    }
+    return ContainerRestoreResponse.newInstance(id, status);
   }
   
-  private void checkpointAndTransport(Container container, String processId,
+  private void executeCheckpoint(Container container, String processId,
       ContainerCheckpointRequest request) {
     Checkpoint checkpoint = new Checkpoint(
         container, processId, request);
     checkpoint.execute();
   }
   
-  private void restoreByTransport(ContainerRestoreRequest request) {
+  private void executeRestore(ContainerRestoreRequest request) {
     Restore restore = new Restore(request);
     restore.execute();
   }
@@ -359,14 +356,20 @@ public class ContainerCR extends AbstractService
     Pair<Long, Integer> key = Pair.of(
         request.getId(), request.getContainerId().hashCode());
     Pair<Integer, String> value = Pair.of(status, directory);
-    this.checkpointStateStore.put(key, value);
+    synchronized (this.checkpointStatusStore) {
+      this.checkpointStatusStore.put(key, value);
+      this.checkpointStatusStore.notifyAll();
+    }
   }
   
   private void setRestoreResponse(ContainerRestoreRequest request,
       int state) {
     Pair<Long, Integer> key = Pair.of(
         request.getId(), request.getContainerId().hashCode());
-    this.restoreStateStore.put(key, state);
+    synchronized (this.restoreStatusStore) {
+      this.restoreStatusStore.put(key, state);
+      this.restoreStatusStore.notifyAll();
+    }
   }
   
   private String getRemotePath(String host, String path) {
@@ -390,5 +393,24 @@ public class ContainerCR extends AbstractService
   private boolean makeDirectory(String path) {
     File dir = new File(path);
     return (dir.isDirectory() || dir.mkdirs());
+  }
+  
+  private <K, V> V waitAndGet(K key, Map<K, V> cncrntMap) {
+    long waitStart = System.currentTimeMillis();
+    synchronized (cncrntMap) {
+      while (!cncrntMap.containsKey(key)) {
+        long waitMillis = WAIT_TIMEOUT_MS - (System.currentTimeMillis() - waitStart);
+        if (waitMillis <= 0) {
+          break;
+        }
+        try {
+          cncrntMap.wait(waitMillis);
+        } catch (InterruptedException e) {
+          LOG.error(e.toString());
+          break;
+        }
+      }
+    }
+    return cncrntMap.get(key);
   }
 }

@@ -16,7 +16,9 @@ public abstract class ContainerCheckpointRequest {
       ContainerId containerId, String address) {
     ContainerCheckpointRequest req = Records.newRecord(
         ContainerCheckpointRequest.class);
+    req.setId(id);
     req.setContainerId(containerId);
+    req.setAddress(address);
     return req;
   }
   
