@@ -48,6 +48,7 @@ import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.CommitResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessType;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
@@ -1979,9 +1980,33 @@ public class ContainerManagerImpl extends CompositeService implements
   }
   
   @Override
-  public ContainerMigrationProcessResponse crFinish(ContainerMigrationProcessRequest request)
+  public ContainerMigrationProcessResponse processContainerMigration(
+      ContainerMigrationProcessRequest request)
       throws YarnException, IOException {
-    // TODO
+    long id = request.getId();
+    ContainerMigrationProcessType processType = request.getType();
+    ContainerId sourceContainerId = request.getSourceContainerId();
+    ContainerId destinationContainerId =
+        request.getDestinationContainerId();
+    LOG.info(String.format(
+        "Starting container migration process (id=%d, type=%s, src_cid=%s, dst_cid=%s)",
+        id, processType, sourceContainerId, destinationContainerId));
+    Integer status = null;
+    switch (processType) {
+    case PRE_CHECKPOINT:
+      
+      break;
+    case PRE_RESTORE:
+      break;
+    case POST_CHECKPOINT:
+      break;
+    case POST_RESTORE:
+      break;
+    case ABORT_CHECKPOINT:
+      break;
+    case ABORT_RESTORE:
+      break;
+    }
     return ContainerMigrationProcessResponse.newInstance();
   }
 }

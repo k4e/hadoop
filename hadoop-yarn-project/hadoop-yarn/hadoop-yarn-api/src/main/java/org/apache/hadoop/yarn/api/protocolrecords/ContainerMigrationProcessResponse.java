@@ -10,6 +10,9 @@ import org.apache.hadoop.yarn.util.Records;
 @Evolving
 public abstract class ContainerMigrationProcessResponse {
   
+  public static final int SUCCESS = 0;
+  public static final int FAILURE = -1;
+  
   public static ContainerMigrationProcessResponse newInstance(long id,
       int status) {
     ContainerMigrationProcessResponse response = Records.newRecord(

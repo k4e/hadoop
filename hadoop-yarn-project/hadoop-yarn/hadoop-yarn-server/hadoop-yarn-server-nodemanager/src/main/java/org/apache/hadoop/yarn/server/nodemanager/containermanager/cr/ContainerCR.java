@@ -31,14 +31,11 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.Shell;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StopContainersRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointResponsePBImpl;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerLaunchContextPBImpl;
@@ -70,10 +67,10 @@ public class ContainerCR extends AbstractService
   class Checkpoint {
     private final Container container;
     private final String processId;
-    private final ContainerCheckpointRequest request;
+    private final ContainerMigrationProcessRequest request;
     
     public Checkpoint(Container container, String processId,
-        ContainerCheckpointRequest request) {
+        ContainerMigrationProcessRequest request) {
       this.container = container;
       this.processId = processId;
       this.request = request;
@@ -83,9 +80,10 @@ public class ContainerCR extends AbstractService
       final long id = request.getId();
       ContainerId containerId = container.getContainerTokenIdentifier()
           .getContainerID();
-      final String address = request.getAddress();
+      final int port = request.getDestinationPort();
+      final String address = request.getDestinationAddress();
       try {
-        executeInternal(id, containerId, address);
+        executeInternal(id, containerId, address, port);
         onSuccess(id, processId, containerId, container.getUser(), address);
       } catch(CRException | IOException e) {
         LOG.error(ExceptionUtils.getStackTrace(e));
@@ -95,10 +93,10 @@ public class ContainerCR extends AbstractService
     }
     
     private void executeInternal(final long id, final ContainerId containerId,
-        final String address) throws CRException, IOException {
+        final String address, final int port) throws CRException, IOException {
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "dump", "--page-server", "--address", address, "--port",
-          Integer.valueOf(DEFAULT_PAGE_SERVER_PORT).toString(),
+          Integer.valueOf(port).toString(),
           "--tree", processId, "--leave-stopped", "--shell-job");
       processBuilder.redirectErrorStream(true);
       int exitValue;
@@ -122,7 +120,7 @@ public class ContainerCR extends AbstractService
     
     private void onSuccess(long id, String processId, ContainerId containerId,
         String user, String address) {
-      setCheckpointResponse(request, ContainerCheckpointResponse.SUCCESS, address);
+      setCheckpointResponse(request, 0, address);
       String diagnostics = String.format(
           "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: success",
           id, containerId, processId, user, address);
@@ -132,7 +130,7 @@ public class ContainerCR extends AbstractService
     
     private void onFailure(long id, String processId, ContainerId containerId,
         String user, String address, String msg) {
-      setCheckpointResponse(request, ContainerCheckpointResponse.FAILURE, null);
+      setCheckpointResponse(request, -1, null);
       String diagnostics = String.format(
           "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: failure",
           id, containerId, processId, user, address);
@@ -302,8 +300,8 @@ public class ContainerCR extends AbstractService
     }
   }
   
-  public ContainerCheckpointResponse getCheckpointResponse(
-      ContainerCheckpointRequest request) {
+  public ContainerMigrationProcessResponse getCheckpointResponse(
+      ContainerMigrationProcessRequest request) {
     long id = request.getId();
     Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
     Pair<Integer, String> value = waitAndGet(key, this.checkpointStatusStore);
