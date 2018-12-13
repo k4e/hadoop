@@ -40,6 +40,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StopContainersRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointResponsePBImpl;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerLaunchContextPBImpl;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
@@ -82,34 +83,23 @@ public class ContainerCR extends AbstractService
       final long id = request.getId();
       ContainerId containerId = container.getContainerTokenIdentifier()
           .getContainerID();
-      String imagesDir = getImagesDir(checkpointDirectory, containerId,
-          request.getId());
+      final String address = request.getAddress();
       try {
-        executeInternal(id, containerId, imagesDir);
-        onSuccess(id, processId, containerId, container.getUser(), imagesDir);
+        executeInternal(id, containerId, address);
+        onSuccess(id, processId, containerId, container.getUser(), address);
       } catch(CRException | IOException e) {
         LOG.error(ExceptionUtils.getStackTrace(e));
-        onFailure(id, processId, containerId, container.getUser(), imagesDir,
+        onFailure(id, processId, containerId, container.getUser(), address,
             e.toString());
       }
     }
     
     private void executeInternal(final long id, final ContainerId containerId,
-        final String imagesDir) throws CRException, IOException {
-      if (!makeDirectory(imagesDir)) {
-        throw new CRException(String.format("Make directory % failed", imagesDir));
-      }
-      ContainerLaunchContextProto ctxProto =
-          ((ContainerLaunchContextPBImpl)container.getLaunchContext())
-          .getProto();
-      String ctxBinPath = getPath(imagesDir, CTX_BIN);
-      BufferedOutputStream ctxFileOut = new BufferedOutputStream(
-          new FileOutputStream(ctxBinPath));
-      ctxFileOut.write(ctxProto.toByteArray());
-      ctxFileOut.close();
+        final String address) throws CRException, IOException {
       ProcessBuilder processBuilder = new ProcessBuilder(
-          "criu", "dump", "--tree", processId, "--images-dir", imagesDir,
-          "--leave-stopped", "--shell-job");
+          "criu", "dump", "--page-server", "--address", address, "--port",
+          Integer.valueOf(DEFAULT_PAGE_SERVER_PORT).toString(),
+          "--tree", processId, "--leave-stopped", "--shell-job");
       processBuilder.redirectErrorStream(true);
       int exitValue;
       try {
@@ -131,21 +121,21 @@ public class ContainerCR extends AbstractService
     }
     
     private void onSuccess(long id, String processId, ContainerId containerId,
-        String user, String imagesDir) {
-      setCheckpointResponse(request, ContainerCheckpointResponse.SUCCESS, imagesDir);
+        String user, String address) {
+      setCheckpointResponse(request, ContainerCheckpointResponse.SUCCESS, address);
       String diagnostics = String.format(
           "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: success",
-          id, containerId, processId, user, imagesDir);
+          id, containerId, processId, user, address);
       dispatcher.getEventHandler().handle(
           new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));
     }
     
     private void onFailure(long id, String processId, ContainerId containerId,
-        String user, String imagesDir, String msg) {
+        String user, String address, String msg) {
       setCheckpointResponse(request, ContainerCheckpointResponse.FAILURE, null);
       String diagnostics = String.format(
           "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: failure",
-          id, containerId, processId, user, imagesDir);
+          id, containerId, processId, user, address);
       LOG.error("ContainerCR.Checkpoint: " + msg);
       dispatcher.getEventHandler().handle(
           new ContainerDiagnosticsUpdateEvent(containerId, diagnostics));

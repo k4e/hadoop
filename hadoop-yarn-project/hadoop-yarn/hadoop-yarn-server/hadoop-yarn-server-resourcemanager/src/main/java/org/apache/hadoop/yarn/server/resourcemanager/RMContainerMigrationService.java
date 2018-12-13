@@ -1,7 +1,9 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -24,12 +26,14 @@ import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRType;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessType;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -54,6 +58,7 @@ public class RMContainerMigrationService extends AbstractService {
 
   private static final Log LOG = LogFactory.getLog(RMContainerMigrationService.class);
   private static final int RETRY_LIMIT = 300;
+  private final static int DEFAULT_PAGE_SERVER_PORT = 54321;
   // TODO 確実にこのサービスがアロケートしたコンテナであることがわかるような方法をとる
   private static final long BASE_ALLOCATION_ID = Long.MAX_VALUE / 2 + RMContainerMigrationService.class.hashCode();
   
@@ -151,12 +156,19 @@ public class RMContainerMigrationService extends AbstractService {
     ContainerManagementProtocol destinationContainerManager
         = getContainerMgrProxy(migrationId, destinationNodeId, applicationAttemptId);
     // チェックポイント リクエストを送信する
+    InetAddress destinationAddress;
+    try {
+      destinationAddress = InetAddress.getByName(destinationHost);
+    } catch (UnknownHostException e) {
+      
+    }
     ContainerCheckpointRequest checkpointRequest =
         ContainerCheckpointRequest.newInstance(migrationId, sourceContainerId,
-        destinationHost);
+        destinationAddress.getHostAddress());
     ContainerCheckpointResponse checkpointResponse =
         sourceContainerManager.checkpointContainer(checkpointRequest);
     // リストア リクエストを送信する
+    /*
     ContainerId destinationContainerId = rmDestinationContainer
         .getContainerId();
     ContainerRestoreResponse restoreResponse = null;
@@ -170,16 +182,28 @@ public class RMContainerMigrationService extends AbstractService {
               checkpointResponse.getDirectory());
       restoreResponse = destinationContainerManager.restoreContainer(restoreRequest);
     }
+    */
+    // リストア処理を開始する
+    Token destinationContainerToken = rmDestinationContainer.getContainer()
+        .getContainerToken();
+    List<String> commands = Collections.singletonList(String.format(
+        "criu restore --images-dir %s --restore-sibling", imagesDir));
+    ctx.setCommands(commands);
+    StartContainerRequest startContainerRequest = StartContainerRequest
+        .newInstance(ctx, destinationContainerToken);
+    StartContainersRequest startContainersRequest = StartContainersRequest
+        .newInstance(Collections.singletonList(startContainerRequest));
+    
     // 終了処理を行う
     boolean completing =
         (checkpointResponse != null && restoreResponse != null
         && checkpointResponse.getStatus() == ContainerCheckpointResponse.SUCCESS
         && restoreResponse.getStatus() == ContainerRestoreResponse.SUCCESS);
-    ContainerCRFinishRequest sourceFinishRequest = ContainerCRFinishRequest
-        .newInstance(migrationId, ContainerCRType.CHECKPOINT,
+    ContainerMigrationProcessRequest sourceFinishRequest = ContainerMigrationProcessRequest
+        .newInstance(migrationId, ContainerMigrationProcessType.CHECKPOINT,
             sourceContainerId, destinationContainerId, completing);
-    ContainerCRFinishRequest destinationFinishRequest = ContainerCRFinishRequest
-        .newInstance(migrationId, ContainerCRType.RESTORE,
+    ContainerMigrationProcessRequest destinationFinishRequest = ContainerMigrationProcessRequest
+        .newInstance(migrationId, ContainerMigrationProcessType.RESTORE,
             sourceContainerId, destinationContainerId, completing);
     if (completing) {
       // TODO 成功時の後処理
@@ -227,7 +251,7 @@ public class RMContainerMigrationService extends AbstractService {
         .createSocketAddrForHost(nodeId.getHost(), nodeId.getPort());
     YarnRPC rpc = getYarnRPC();
     UserGroupInformation currentUser = UserGroupInformation.createRemoteUser(
-        String.format("CR_%d_%s", id, attemptId.toString()), AuthMethod.TOKEN);
+        String.format("CR_%d_%s", id, attemptId.toString()));
     String user = rmContext.getRMApps().get(attemptId.getApplicationId())
         .getUser();
     Token token = rmContext.getNMTokenSecretManager().createNMToken(

@@ -45,7 +45,5 @@ service ContainerManagementProtocolService {
   rpc rollbackLastReInitialization(ContainerIdProto) returns (RollbackResponseProto);
   rpc commitLastReInitialization(ContainerIdProto) returns (CommitResponseProto);
 
-  rpc checkpointContainer(ContainerCheckpointRequestProto) returns (ContainerCheckpointResponseProto);
-  rpc restoreContainer(ContainerRestoreRequestProto) returns (ContainerRestoreResponseProto);
-  rpc crFinish(ContainerCRFinishRequestProto) returns (ContainerCRFinishResponseProto);
+  rpc processContainerMigration(ContainerMigrationProcessRequestProto) returns (ContainerMigrationProcessResponseProto);
 }

@@ -1,36 +1,36 @@
 package org.apache.hadoop.yarn.api.protocolrecords.impl.pb;
 
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRType;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessType;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerIdPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.ProtoUtils;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerIdProto;
-import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCRFinishRequestProto;
-import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCRFinishRequestProtoOrBuilder;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerMigrationProcessRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerMigrationProcessRequestProtoOrBuilder;
 
 import com.google.protobuf.TextFormat;
 
-public class ContainerCRFinishRequestPBImpl extends ContainerCRFinishRequest {
+public class ContainerMigrationProcessRequestPBImpl extends ContainerMigrationProcessRequest {
   
-  private ContainerCRFinishRequestProto proto =
-      ContainerCRFinishRequestProto.getDefaultInstance();
-  private ContainerCRFinishRequestProto.Builder builder = null;
+  private ContainerMigrationProcessRequestProto proto =
+      ContainerMigrationProcessRequestProto.getDefaultInstance();
+  private ContainerMigrationProcessRequestProto.Builder builder = null;
   private boolean viaProto = false;
   
   private ContainerId sourceContainerId;
   private ContainerId destinationContainerId;
   
-  public ContainerCRFinishRequestPBImpl() {
-    this.builder = ContainerCRFinishRequestProto.newBuilder();
+  public ContainerMigrationProcessRequestPBImpl() {
+    this.builder = ContainerMigrationProcessRequestProto.newBuilder();
   }
   
-  public ContainerCRFinishRequestPBImpl(ContainerCRFinishRequestProto proto) {
+  public ContainerMigrationProcessRequestPBImpl(ContainerMigrationProcessRequestProto proto) {
     this.proto = proto;
     this.viaProto = true;
   }
   
-  public ContainerCRFinishRequestProto getProto() {
+  public ContainerMigrationProcessRequestProto getProto() {
     mergeLocalToProto();
     this.proto = viaProto ? proto : builder.build();
     this.viaProto = true;
@@ -39,7 +39,7 @@ public class ContainerCRFinishRequestPBImpl extends ContainerCRFinishRequest {
   
   @Override
   public long getId() {
-    ContainerCRFinishRequestProtoOrBuilder p = viaProto ? proto : builder;
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
     return p.getId();
   }
 
@@ -50,8 +50,8 @@ public class ContainerCRFinishRequestPBImpl extends ContainerCRFinishRequest {
   }
 
   @Override
-  public ContainerCRType getType() {
-    ContainerCRFinishRequestProtoOrBuilder p = viaProto ? proto : builder;
+  public ContainerMigrationProcessType getType() {
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
     if (!p.hasType()) {
       return null;
     }
@@ -59,7 +59,7 @@ public class ContainerCRFinishRequestPBImpl extends ContainerCRFinishRequest {
   }
   
   @Override
-  public void setType(ContainerCRType type) {
+  public void setType(ContainerMigrationProcessType type) {
     maybeInitBuilder();
     if (type == null) {
       builder.clearType();
@@ -71,7 +71,7 @@ public class ContainerCRFinishRequestPBImpl extends ContainerCRFinishRequest {
 
   @Override
   public ContainerId getSourceContainerId() {
-    ContainerCRFinishRequestProtoOrBuilder p = viaProto ? proto : builder;
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
     if (this.sourceContainerId == null && p.hasSourceContainerId()) {
       this.sourceContainerId = convertFromProtoFormat(p.getSourceContainerId());
     }
@@ -89,7 +89,7 @@ public class ContainerCRFinishRequestPBImpl extends ContainerCRFinishRequest {
 
   @Override
   public ContainerId getDestinationContainerId() {
-    ContainerCRFinishRequestProtoOrBuilder p = viaProto ? proto : builder;
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
     if (this.destinationContainerId == null && p.hasDestinationContainerId()) {
       this.destinationContainerId = convertFromProtoFormat(
           p.getDestinationContainerId());
@@ -105,17 +105,42 @@ public class ContainerCRFinishRequestPBImpl extends ContainerCRFinishRequest {
     }
     this.destinationContainerId = destinationContainerId;
   }
-
+  
+  
   @Override
-  public boolean getCompleting() {
-    ContainerCRFinishRequestProtoOrBuilder p = viaProto ? proto : builder;
-    return p.getCompleting();
+  public boolean hasDestinationAddress() {
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
+    return p.hasDestinationAddress();
   }
-
+  
   @Override
-  public void setCompleting(boolean completing) {
+  public String getDestinationAddress() {
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getDestinationAddress();
+  }
+  
+  @Override
+  public void setDestinationAddress(String destinationAddress) {
     maybeInitBuilder();
-    this.builder.setCompleting(completing);
+    this.builder.setDestinationAddress(destinationAddress);
+  }
+  
+  @Override
+  public boolean hasDestinationPort() {
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
+    return p.hasDestinationPort();
+  }
+  
+  @Override
+  public int getDestinationPort() {
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getDestinationPort();
+  }
+  
+  @Override
+  public void setDestinationPort(int destinationPort) {
+    maybeInitBuilder();
+    this.builder.setDestinationPort(destinationPort);
   }
   
   @Override
@@ -160,7 +185,7 @@ public class ContainerCRFinishRequestPBImpl extends ContainerCRFinishRequest {
 
   private void maybeInitBuilder() {
     if (viaProto || builder == null) {
-      this.builder = ContainerCRFinishRequestProto.newBuilder(proto);
+      this.builder = ContainerMigrationProcessRequestProto.newBuilder(proto);
     }
     this.viaProto = false;
   }

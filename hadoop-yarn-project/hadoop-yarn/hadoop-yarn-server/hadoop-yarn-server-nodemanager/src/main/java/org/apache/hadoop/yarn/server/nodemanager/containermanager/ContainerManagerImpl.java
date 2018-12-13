@@ -46,8 +46,8 @@ import org.apache.hadoop.service.Service;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.CommitResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
@@ -1979,9 +1979,9 @@ public class ContainerManagerImpl extends CompositeService implements
   }
   
   @Override
-  public ContainerCRFinishResponse crFinish(ContainerCRFinishRequest request)
+  public ContainerMigrationProcessResponse crFinish(ContainerMigrationProcessRequest request)
       throws YarnException, IOException {
     // TODO
-    return ContainerCRFinishResponse.newInstance();
+    return ContainerMigrationProcessResponse.newInstance();
   }
 }

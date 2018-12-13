@@ -28,12 +28,8 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocolPB;
 import org.apache.hadoop.yarn.api.protocolrecords.CommitResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
@@ -53,12 +49,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.StartContainersResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.StopContainersRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StopContainersResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.CommitResponsePBImpl;
-import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCRFinishRequestPBImpl;
-import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCRFinishResponsePBImpl;
-import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointRequestPBImpl;
-import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerCheckpointResponsePBImpl;
-import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerRestoreRequestPBImpl;
-import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerRestoreResponsePBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerMigrationProcessRequestPBImpl;
+import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerMigrationProcessResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerUpdateRequestPBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.ContainerUpdateResponsePBImpl;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.GetContainerStatusesRequestPBImpl;
@@ -84,9 +76,7 @@ import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.ipc.RPCUtil;
 import org.apache.hadoop.yarn.proto.YarnProtos;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos;
-import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCRFinishRequestProto;
-import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerCheckpointRequestProto;
-import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerRestoreRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerMigrationProcessRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ContainerUpdateRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.GetContainerStatusesRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.ResourceLocalizationRequestProto;
@@ -297,40 +287,12 @@ public class ContainerManagementProtocolPBClientImpl implements ContainerManagem
   }
   
   @Override
-  public ContainerCheckpointResponse checkpointContainer(
-      ContainerCheckpointRequest request) throws YarnException, IOException {
-    ContainerCheckpointRequestProto proto =
-        ((ContainerCheckpointRequestPBImpl)request).getProto();
+  public ContainerMigrationProcessResponse processContainerMigration(
+      ContainerMigrationProcessRequest request) throws YarnException, IOException {
+    ContainerMigrationProcessRequestProto proto =
+        ((ContainerMigrationProcessRequestPBImpl)request).getProto();
     try {
-      return new ContainerCheckpointResponsePBImpl(
-          proxy.checkpointContainer(null, proto));
-    } catch (ServiceException e) {
-      RPCUtil.unwrapAndThrowException(e);
-      return null;
-    }
-  }
-  
-  @Override
-  public ContainerRestoreResponse restoreContainer(
-      ContainerRestoreRequest request) throws YarnException, IOException {
-    ContainerRestoreRequestProto proto =
-        ((ContainerRestoreRequestPBImpl)request).getProto();
-    try {
-      return new ContainerRestoreResponsePBImpl(
-          proxy.restoreContainer(null, proto));
-    } catch (ServiceException e) {
-      RPCUtil.unwrapAndThrowException(e);
-      return null;
-    }
-  }
-  
-  @Override
-  public ContainerCRFinishResponse crFinish(ContainerCRFinishRequest request)
-      throws YarnException, IOException {
-    ContainerCRFinishRequestProto proto =
-        ((ContainerCRFinishRequestPBImpl)request).getProto();
-    try {
-      return new ContainerCRFinishResponsePBImpl(proxy.crFinish(null, proto));
+      return new ContainerMigrationProcessResponsePBImpl(proxy.processContainerMigration(null, proto));
     } catch (ServiceException e) {
       RPCUtil.unwrapAndThrowException(e);
       return null;

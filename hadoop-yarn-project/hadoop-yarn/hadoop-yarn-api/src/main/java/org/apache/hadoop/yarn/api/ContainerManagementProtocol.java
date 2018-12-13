@@ -24,12 +24,8 @@ import org.apache.hadoop.classification.InterfaceAudience.Public;
 import org.apache.hadoop.classification.InterfaceStability.Stable;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.protocolrecords.CommitResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCRFinishResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
@@ -297,22 +293,8 @@ public interface ContainerManagementProtocol {
   
   @Public
   @Unstable
-  default ContainerCheckpointResponse checkpointContainer(
-      ContainerCheckpointRequest request) throws YarnException, IOException {
-    throw new UnsupportedOperationException("containerCheckpoint");
-  }
-  
-  @Public
-  @Unstable
-  default ContainerRestoreResponse restoreContainer(
-      ContainerRestoreRequest request) throws YarnException, IOException {
-    throw new UnsupportedOperationException("containerRestore");
-  }
-  
-  @Public
-  @Unstable
-  default ContainerCRFinishResponse crFinish(ContainerCRFinishRequest request)
-      throws YarnException, IOException {
-    throw new UnsupportedOperationException("crFinish");
+  default ContainerMigrationProcessResponse processContainerMigration(
+      ContainerMigrationProcessRequest request) throws YarnException, IOException {
+    throw new UnsupportedOperationException("processContainerMigration");
   }
 }
