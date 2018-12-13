@@ -18,6 +18,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
+import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
@@ -145,9 +147,9 @@ public class RMContainerMigrationService extends AbstractService {
     NodeId sourceNodeId = rmSourceNode.getNodeID();
     NodeId destinationNodeId = rmDestinationNode.getNodeID();
     ContainerManagementProtocol sourceContainerManager
-        = getContainerMgrProxy(sourceNodeId, applicationAttemptId);
+        = getContainerMgrProxy(migrationId, sourceNodeId, applicationAttemptId);
     ContainerManagementProtocol destinationContainerManager
-        = getContainerMgrProxy(destinationNodeId, applicationAttemptId);
+        = getContainerMgrProxy(migrationId, destinationNodeId, applicationAttemptId);
     // チェックポイント リクエストを送信する
     ContainerCheckpointRequest checkpointRequest =
         ContainerCheckpointRequest.newInstance(migrationId, sourceContainerId,
@@ -219,17 +221,24 @@ public class RMContainerMigrationService extends AbstractService {
     response.setAllocatedContainers(containers);
   }
   
-  private ContainerManagementProtocol getContainerMgrProxy(NodeId nodeId,
-      ApplicationAttemptId attemptId) throws IOException {
+  private ContainerManagementProtocol getContainerMgrProxy(long id,
+      NodeId nodeId, ApplicationAttemptId attemptId) throws IOException {
     InetSocketAddress address = NetUtils
         .createSocketAddrForHost(nodeId.getHost(), nodeId.getPort());
     YarnRPC rpc = getYarnRPC();
-    UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
+    UserGroupInformation currentUser = UserGroupInformation.createRemoteUser(
+        String.format("CR_%d_%s", id, attemptId.toString()), AuthMethod.TOKEN);
     String user = rmContext.getRMApps().get(attemptId.getApplicationId())
         .getUser();
     Token token = rmContext.getNMTokenSecretManager().createNMToken(
         attemptId, nodeId, user);
-    currentUser.addToken(ConverterUtils.convertFromYarn(token, address));
+    org.apache.hadoop.security.token.Token<TokenIdentifier> securityToken =
+        ConverterUtils.convertFromYarn(token, address);
+    currentUser.addToken(securityToken);
+    LOG.info("currentUser = " + currentUser.toString());
+    LOG.info("user = " + user);
+    LOG.info("token = " + token.toString());
+    LOG.info("securityToken = " + securityToken.toString());
     return NMProxy.createNMProxy(rmContext.getYarnConfiguration(),
         ContainerManagementProtocol.class, currentUser, rpc, address);
   }

@@ -136,7 +136,7 @@ public class ContainerRestoreRequestPBImpl extends ContainerRestoreRequest {
   @Override
   public void setDirectory(String directory) {
     maybeInitBuilder();
-    this.builder.setAddress(directory);
+    this.builder.setDirectory(directory);
   }
 
   @Override

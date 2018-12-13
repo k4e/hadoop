@@ -19,6 +19,7 @@ public abstract class ContainerRestoreRequest {
       String directory) {
     ContainerRestoreRequest req =
         Records.newRecord(ContainerRestoreRequest.class);
+    req.setId(id);
     req.setContainerId(containerId);
     req.setContainerToken(containerToken);
     req.setSourceContainerId(sourceContainerId);

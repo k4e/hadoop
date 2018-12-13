@@ -827,6 +827,9 @@ public class ContainerManagerImpl extends CompositeService implements
       UserGroupInformation remoteUgi) {
     Set<TokenIdentifier> tokenIdentifiers = remoteUgi.getTokenIdentifiers();
     NMTokenIdentifier resultId = null;
+    // TODO あとで消す
+    LOG.info("remoteUgi = " + remoteUgi.toString());
+    LOG.info("tokenIdentifiers = " + tokenIdentifiers.toString());
     for (TokenIdentifier id : tokenIdentifiers) {
       if (id instanceof NMTokenIdentifier) {
         resultId = (NMTokenIdentifier) id;

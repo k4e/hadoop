@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
@@ -87,6 +88,7 @@ public class ContainerCR extends AbstractService
         executeInternal(id, containerId, imagesDir);
         onSuccess(id, processId, containerId, container.getUser(), imagesDir);
       } catch(CRException | IOException e) {
+        LOG.error(ExceptionUtils.getStackTrace(e));
         onFailure(id, processId, containerId, container.getUser(), imagesDir,
             e.toString());
       }
@@ -175,6 +177,7 @@ public class ContainerCR extends AbstractService
         onSuccess(id, destinationContainerId, destinationImagesDir,
             sourceContainerId, sourceHost, sourceImagesDir);
       } catch(CRException | YarnException | IOException e) {
+        LOG.error(ExceptionUtils.getStackTrace(e));
         onFailure(id, destinationContainerId, destinationImagesDir,
             sourceContainerId, sourceHost, sourceImagesDir, e.toString());
       }
@@ -184,8 +187,11 @@ public class ContainerCR extends AbstractService
         final ContainerId destinationContainerId, final String imagesDir,
         final ContainerId sourceContainerId, final String remoteImagesDir)
         throws CRException, YarnException, IOException {
-      RSync rsync = new RSync().source(remoteImagesDir).destination(imagesDir)
-          .archive(true).delete(true);
+      makeDirectory(imagesDir);
+      String sourceDir = StringUtils.stripEnd(remoteImagesDir, "/") + "/";
+      String destinationDir = StringUtils.stripEnd(imagesDir, "/") + "/";
+      RSync rsync = new RSync().source(sourceDir).destination(destinationDir)
+          .archive(true).delete(true).verbose(true);
       try {
         CollectingProcessOutput rsyncOut = rsync.execute();
         LOG.info("rsync: " + rsyncOut.getStdOut());
@@ -247,7 +253,7 @@ public class ContainerCR extends AbstractService
       setRestoreResponse(request, ContainerRestoreResponse.FAILURE);
       String diagnostics = String.format(
           "Restore: id: %d, dst_cid: %s, dst_imgdir: %s, src_cid: %s, src_host: %s, src_imgdir: %s, result: failure",
-          destinationContainerId.toString(), destinationImagesDir,
+          id, destinationContainerId.toString(), destinationImagesDir,
           sourceContainerId.toString(), sourceHost, sourceImagesDir);
       LOG.error("Restore: " + msg);
       dispatcher.getEventHandler().handle(
