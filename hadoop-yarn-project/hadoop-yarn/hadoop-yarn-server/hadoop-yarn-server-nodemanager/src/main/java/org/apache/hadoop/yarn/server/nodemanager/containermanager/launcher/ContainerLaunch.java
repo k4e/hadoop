@@ -61,7 +61,7 @@ import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
@@ -1894,7 +1894,7 @@ public class ContainerLaunch implements Callable<Integer> {
     }
   }
   
-  public void checkpointContainer(ContainerCheckpointRequest request)
+  public void checkpointContainer(ContainerMigrationProcessRequest request)
       throws IOException {
     ContainerId containerId = container.getContainerTokenIdentifier()
         .getContainerID();

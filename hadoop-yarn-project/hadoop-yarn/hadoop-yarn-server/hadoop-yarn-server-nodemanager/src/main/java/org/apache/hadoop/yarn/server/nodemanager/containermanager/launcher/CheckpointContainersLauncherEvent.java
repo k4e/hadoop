@@ -13,7 +13,7 @@ public class CheckpointContainersLauncherEvent extends ContainersLauncherEvent {
     this.request = request;
   }
   
-  public ContainerMigrationProcessRequest getCheckpointRequest() {
+  public ContainerMigrationProcessRequest getRequest() {
     return request;
   }
 }

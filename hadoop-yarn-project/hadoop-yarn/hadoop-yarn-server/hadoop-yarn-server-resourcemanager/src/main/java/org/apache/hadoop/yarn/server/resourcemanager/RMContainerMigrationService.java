@@ -27,12 +27,15 @@ import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessType;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.StartContainersResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
 import org.apache.hadoop.yarn.api.records.ExecutionTypeRequest;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -151,61 +154,64 @@ public class RMContainerMigrationService extends AbstractService {
         = getContainerMgrProxy(migrationId, sourceNodeId, applicationAttemptId);
     ContainerManagementProtocol destinationContainerManager
         = getContainerMgrProxy(migrationId, destinationNodeId, applicationAttemptId);
+    // 移行先ノードでページサーバを起動する
+    ContainerId destinationContainerId =
+        rmDestinationContainer.getContainerId();
+    ContainerMigrationProcessRequest openPageServerRequest =
+        ContainerMigrationProcessRequest.newInstance(migrationId,
+        ContainerMigrationProcessType.PRE_RESTORE, sourceContainerId,
+        destinationContainerId);
+    ContainerMigrationProcessResponse openPageServerResponse =
+        sourceContainerManager.processContainerMigration(openPageServerRequest);
+    if (openPageServerResponse.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
+      throw new YarnException("Open page server not success");
+    }
+    if (openPageServerResponse.hasImagesDir()) {
+      throw new YarnException("CheckpointResponse.imagesDir == null");
+    }
+    String imagesDir = openPageServerResponse.getImagesDir();
     // チェックポイント リクエストを送信する
     InetAddress destinationAddress;
     try {
       destinationAddress = InetAddress.getByName(destinationHost);
     } catch (UnknownHostException e) {
-      
+      LOG.error(e.toString());
+      throw new YarnException(e);
     }
-    ContainerCheckpointRequest checkpointRequest =
-        ContainerCheckpointRequest.newInstance(migrationId, sourceContainerId,
-        destinationAddress.getHostAddress());
-    ContainerCheckpointResponse checkpointResponse =
-        sourceContainerManager.checkpointContainer(checkpointRequest);
-    // リストア リクエストを送信する
-    /*
-    ContainerId destinationContainerId = rmDestinationContainer
-        .getContainerId();
-    ContainerRestoreResponse restoreResponse = null;
-    if (checkpointResponse.getStatus() == ContainerCheckpointResponse.SUCCESS
-        && checkpointResponse.hasDirectory()) {
-      Token destinationContainerToken = rmDestinationContainer.getContainer()
-          .getContainerToken();
-      ContainerRestoreRequest restoreRequest = ContainerRestoreRequest
-          .newInstance(migrationId, destinationContainerId,
-              destinationContainerToken, sourceContainerId, sourceHost,
-              checkpointResponse.getDirectory());
-      restoreResponse = destinationContainerManager.restoreContainer(restoreRequest);
+    ContainerMigrationProcessRequest checkpointRequest =
+        ContainerMigrationProcessRequest.newInstance(migrationId,
+        ContainerMigrationProcessType.PRE_CHECKPOINT, sourceContainerId,
+        destinationContainerId);
+    checkpointRequest.setDestinationAddress(destinationAddress.getHostAddress());
+    checkpointRequest.setDestinationPort(DEFAULT_PAGE_SERVER_PORT);
+    ContainerMigrationProcessResponse checkpointResponse =
+        sourceContainerManager.processContainerMigration(checkpointRequest);
+    if (checkpointResponse.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
+      throw new YarnException("Checkpoint not success");
     }
-    */
-    // リストア処理を開始する
+    ContainerLaunchContext launchContext = checkpointResponse
+        .getContainerLaunchContext();
+    if (launchContext == null) {
+      throw new YarnException("CheckpointResponse.launchContext == null");
+    }
+    // リストア コンテナを開始する
     Token destinationContainerToken = rmDestinationContainer.getContainer()
         .getContainerToken();
     List<String> commands = Collections.singletonList(String.format(
         "criu restore --images-dir %s --restore-sibling", imagesDir));
-    ctx.setCommands(commands);
+    launchContext.setCommands(commands);
     StartContainerRequest startContainerRequest = StartContainerRequest
-        .newInstance(ctx, destinationContainerToken);
+        .newInstance(launchContext, destinationContainerToken);
     StartContainersRequest startContainersRequest = StartContainersRequest
         .newInstance(Collections.singletonList(startContainerRequest));
-    
+    StartContainersResponse startContainersResponse =
+        destinationContainerManager.startContainers(startContainersRequest);
     // 終了処理を行う
-    boolean completing =
-        (checkpointResponse != null && restoreResponse != null
-        && checkpointResponse.getStatus() == ContainerCheckpointResponse.SUCCESS
-        && restoreResponse.getStatus() == ContainerRestoreResponse.SUCCESS);
-    ContainerMigrationProcessRequest sourceFinishRequest = ContainerMigrationProcessRequest
-        .newInstance(migrationId, ContainerMigrationProcessType.CHECKPOINT,
-            sourceContainerId, destinationContainerId, completing);
-    ContainerMigrationProcessRequest destinationFinishRequest = ContainerMigrationProcessRequest
-        .newInstance(migrationId, ContainerMigrationProcessType.RESTORE,
-            sourceContainerId, destinationContainerId, completing);
+    boolean completing = isCompleting(checkpointResponse,
+        openPageServerResponse, startContainersResponse, destinationContainerId);
     if (completing) {
       // TODO 成功時の後処理
     }
-    sourceContainerManager.crFinish(sourceFinishRequest);
-    destinationContainerManager.crFinish(destinationFinishRequest);
   }
   
   public boolean isWaitingAllocation() {
@@ -266,5 +272,17 @@ public class RMContainerMigrationService extends AbstractService {
   private YarnRPC getYarnRPC() {
     // TODO: Don't create again and again.
     return YarnRPC.create(this.rmContext.getYarnConfiguration());
+  }
+  
+  private boolean isCompleting(
+      ContainerMigrationProcessResponse preCheckpointResponse,
+      ContainerMigrationProcessResponse preRestoreResponse,
+      StartContainersResponse startContainersResponse,
+      ContainerId destinationContainerId) {
+    return preCheckpointResponse != null && preRestoreResponse != null &&
+        startContainersResponse != null && destinationContainerId != null &&
+        preCheckpointResponse.getStatus() == ContainerMigrationProcessResponse.SUCCESS &&
+        preRestoreResponse.getStatus() == ContainerMigrationProcessResponse.SUCCESS &&
+        startContainersResponse.getSuccessfullyStartedContainers().contains(destinationContainerId);
   }
 }
