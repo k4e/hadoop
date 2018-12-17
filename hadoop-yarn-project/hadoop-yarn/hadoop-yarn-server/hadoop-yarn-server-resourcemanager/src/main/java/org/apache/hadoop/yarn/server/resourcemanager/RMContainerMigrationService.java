@@ -161,6 +161,7 @@ public class RMContainerMigrationService extends AbstractService {
         ContainerMigrationProcessRequest.newInstance(migrationId,
         ContainerMigrationProcessType.PRE_RESTORE, sourceContainerId,
         destinationContainerId);
+    openPageServerRequest.setDestinationPort(DEFAULT_PAGE_SERVER_PORT);
     ContainerMigrationProcessResponse openPageServerResponse =
         sourceContainerManager.processContainerMigration(openPageServerRequest);
     if (openPageServerResponse.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
