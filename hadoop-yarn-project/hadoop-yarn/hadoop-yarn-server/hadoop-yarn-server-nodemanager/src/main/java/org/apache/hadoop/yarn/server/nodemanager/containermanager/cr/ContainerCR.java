@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -29,6 +30,7 @@ public class ContainerCR extends AbstractService
 
   private final static Logger LOG = LoggerFactory.getLogger(ContainerCR.class);
   private final static String IMGDIR = "tmp/crimg";
+  private final static String PAGE_SERVER_LOG = "criu.pgsv.log";
   private final static long WAIT_TIMEOUT_MS = 30000;
   
   class Checkpoint {
@@ -136,28 +138,14 @@ public class ContainerCR extends AbstractService
     private void executeInternal(int port, String imagesDir)
         throws CRException, IOException {
       makeDirectory(imagesDir);
+      File logFile = new File(getPath(imagesDir, PAGE_SERVER_LOG));
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "page-server", "--images-dir", imagesDir,
           "--port", Integer.valueOf(port).toString());
       processBuilder.redirectErrorStream(true);
-      int exitValue;
-      try {
-        Process process = processBuilder.start();
-        BufferedReader reader = new BufferedReader(
-            new InputStreamReader(process.getInputStream()));
-        String line;
-        while ((line = reader.readLine()) != null) {
-          LOG.info("criu dump: " + line);
-        }
-        exitValue = process.waitFor();
-        reader.close(); // 場所はここで大丈夫？
-      } catch (InterruptedException e) {
-        throw new CRException(e);
-      }
-      if (exitValue != 0) {
-        throw new CRException(
-            String.format("criu page-server returned %d", exitValue));
-      } 
+      processBuilder.redirectInput(logFile);
+      Process process = processBuilder.start();
+      pageServerProcess.push(process);
     }
     
     private void onSuccess(long id, int port, String imagesDir) {
@@ -182,6 +170,7 @@ public class ContainerCR extends AbstractService
   private final Context nmContext;
   private final Dispatcher dispatcher;
   private final String imagesDirHome;
+  private final ConcurrentLinkedDeque<Process> pageServerProcess;
   private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, ContainerLaunchContext> > checkpointStatusStore;
   private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > openPageServerStatusStore;
   
@@ -196,6 +185,7 @@ public class ContainerCR extends AbstractService
     } else {
       this.imagesDirHome = String.format("/%s", IMGDIR);
     }
+    this.pageServerProcess = new ConcurrentLinkedDeque<>();
     this.checkpointStatusStore = new ConcurrentHashMap<>();
     this.openPageServerStatusStore = new ConcurrentHashMap<>();
   }
@@ -208,6 +198,14 @@ public class ContainerCR extends AbstractService
   @Override
   public void serviceStop() throws Exception {
     super.serviceStop();
+    synchronized (this.pageServerProcess) {
+      while (!this.pageServerProcess.isEmpty()) {
+        Process process = this.pageServerProcess.pop();
+        if (process.isAlive()) {
+          process.destroy();
+        }
+      }
+    }
   }
   
   @Override
