@@ -23,7 +23,7 @@ import com.google.protobuf.ByteString;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.UpdateContainerTokenEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCR;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCREventType;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCRRestoreEvent;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCROpenPageServerEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.event.LogHandlerTokenUpdatedEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.scheduler.ContainerSchedulerEvent;
 import org.slf4j.Logger;
@@ -49,10 +49,6 @@ import org.apache.hadoop.yarn.api.protocolrecords.CommitResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessType;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerCheckpointResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.ContainerRestoreResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
@@ -1940,46 +1936,6 @@ public class ContainerManagerImpl extends CompositeService implements
   }
   
   @Override
-  public ContainerCheckpointResponse checkpointContainer(
-      ContainerCheckpointRequest request) throws YarnException, IOException {
-    ContainerId containerId = request.getContainerId();
-    Container container = this.context.getContainers().get(containerId);
-    if (container == null) {
-      LOG.info("Container " + containerId + " no longer exists");
-      return ContainerCheckpointResponse.newInstance(
-          request.getId(), ContainerCheckpointResponse.FAILURE);
-    }
-    LOG.info(String.format(
-        "Starting container checkpoint (containerId=%s)",
-        containerId.toString()));
-    this.dispatcher.getEventHandler().handle(
-        new CheckpointContainersLauncherEvent(container, request));
-    ContainerCheckpointResponse response =
-        this.containerCR.getCheckpointResponse(request);
-    LOG.info(String.format(
-        "Completed container checkpoint (containerId=%s, status=%d)",
-        containerId.toString(), response.getStatus()));
-    return response;
-  }
-  
-  @Override
-  public ContainerRestoreResponse restoreContainer(
-      ContainerRestoreRequest request) throws YarnException, IOException {
-    ContainerId containerId = request.getContainerId();
-    LOG.info(String.format(
-        "Starting container restore (containerId=%s)",
-        containerId.toString()));
-    this.dispatcher.getEventHandler().handle(
-        new ContainerCRRestoreEvent(request));
-    ContainerRestoreResponse response =
-        this.containerCR.getRestoreResponse(request);
-    LOG.info(String.format(
-        "Completed container restore (containerId=%s, status=%d)",
-        containerId.toString(), response.getStatus()));
-    return response;
-  }
-  
-  @Override
   public ContainerMigrationProcessResponse processContainerMigration(
       ContainerMigrationProcessRequest request)
       throws YarnException, IOException {
@@ -1991,12 +1947,25 @@ public class ContainerManagerImpl extends CompositeService implements
     LOG.info(String.format(
         "Starting container migration process (id=%d, type=%s, src_cid=%s, dst_cid=%s)",
         id, processType, sourceContainerId, destinationContainerId));
-    Integer status = null;
+    ContainerMigrationProcessResponse response = ContainerMigrationProcessResponse
+        .newInstance(id, ContainerMigrationProcessResponse.FAILURE);
     switch (processType) {
     case PRE_CHECKPOINT:
-      
+      Container sourceContainer = this.context.getContainers()
+          .get(sourceContainerId);
+      if (sourceContainer == null) {
+        LOG.info("Container " + sourceContainerId + " no longer exists");
+        return ContainerMigrationProcessResponse.newInstance(
+            request.getId(), ContainerMigrationProcessResponse.FAILURE);
+      }
+      this.dispatcher.getEventHandler().handle(
+          new CheckpointContainersLauncherEvent(sourceContainer, request));
+      response = this.containerCR.getCheckpointResponse(request);
       break;
     case PRE_RESTORE:
+      this.dispatcher.getEventHandler().handle(
+          new ContainerCROpenPageServerEvent(request));
+      response = this.containerCR.getOpenPageServerResponse(request);
       break;
     case POST_CHECKPOINT:
       break;
@@ -2007,6 +1976,10 @@ public class ContainerManagerImpl extends CompositeService implements
     case ABORT_RESTORE:
       break;
     }
-    return ContainerMigrationProcessResponse.newInstance();
+    LOG.info(String.format(
+        "Completing container migration process (id=%d, type=%s, src_cid=%s, dst_cid=%s, status=%d)",
+        id, processType, sourceContainerId, destinationContainerId,
+        response.getStatus()));
+    return response;
   }
 }

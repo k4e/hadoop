@@ -7,14 +7,12 @@ public class ContainerCRCheckpointEvent extends ContainerCREvent {
 
   private final Container container;
   private final String processId;
-  private final ContainerMigrationProcessRequest request;
   
   public ContainerCRCheckpointEvent(Container container, String processId,
       ContainerMigrationProcessRequest request) {
-    super(ContainerCREventType.CHECKPOINT);
+    super(ContainerCREventType.CHECKPOINT, request);
     this.container = container;
     this.processId = processId;
-    this.request = request;
   }
   
   public Container getContainer() {
@@ -23,9 +21,5 @@ public class ContainerCRCheckpointEvent extends ContainerCREvent {
   
   public String getProcessId() {
     return this.processId;
-  }
-  
-  public ContainerMigrationProcessRequest getRequest() {
-    return this.request;
   }
 }

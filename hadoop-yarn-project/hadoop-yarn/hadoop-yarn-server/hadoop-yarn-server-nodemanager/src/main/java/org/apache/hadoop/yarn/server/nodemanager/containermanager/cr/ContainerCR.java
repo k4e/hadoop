@@ -82,13 +82,14 @@ public class ContainerCR extends AbstractService
           .getContainerID();
       final int port = request.getDestinationPort();
       final String address = request.getDestinationAddress();
+      final String user = container.getUser();
       try {
         executeInternal(id, containerId, address, port);
-        onSuccess(id, processId, containerId, container.getUser(), address);
+        ContainerLaunchContext ctx = container.getLaunchContext();
+        onSuccess(id, ctx, processId, containerId, user, address);
       } catch(CRException | IOException e) {
         LOG.error(ExceptionUtils.getStackTrace(e));
-        onFailure(id, processId, containerId, container.getUser(), address,
-            e.toString());
+        onFailure(id, processId, containerId, user, address, e.toString());
       }
     }
     
@@ -118,9 +119,10 @@ public class ContainerCR extends AbstractService
       }
     }
     
-    private void onSuccess(long id, String processId, ContainerId containerId,
-        String user, String address) {
-      setCheckpointResponse(request, 0, address);
+    private void onSuccess(long id, ContainerLaunchContext ctx,
+        String processId, ContainerId containerId, String user, String address) {
+      setCheckpointResponse(
+          request, ContainerMigrationProcessResponse.SUCCESS, ctx);
       String diagnostics = String.format(
           "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: success",
           id, containerId, processId, user, address);
@@ -130,7 +132,8 @@ public class ContainerCR extends AbstractService
     
     private void onFailure(long id, String processId, ContainerId containerId,
         String user, String address, String msg) {
-      setCheckpointResponse(request, -1, null);
+      setCheckpointResponse(
+          request, ContainerMigrationProcessResponse.FAILURE, null);
       String diagnostics = String.format(
           "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: failure",
           id, containerId, processId, user, address);
@@ -140,16 +143,16 @@ public class ContainerCR extends AbstractService
     }
   }
   
-  class Restore {
-    private final ContainerRestoreRequest request;
+  class OpenPageServer {
+    private final ContainerMigrationProcessRequest request;
     
-    public Restore(ContainerRestoreRequest request) {
+    public OpenPageServer(ContainerMigrationProcessRequest request) {
       this.request = request;
     }
     
     public void execute() {
       long id = request.getId();
-      ContainerId destinationContainerId = request.getContainerId();
+      ContainerId destinationContainerId = request.getDestinationContainerId();
       ContainerId sourceContainerId = request.getSourceContainerId();
       String destinationImagesDir = getImagesDir(restoreDirectory,
           sourceContainerId, id);
@@ -225,7 +228,7 @@ public class ContainerCR extends AbstractService
     private void onSuccess(long id, ContainerId destinationContainerId,
         String destinationImagesDir, ContainerId sourceContainerId,
         String sourceHost, String sourceImagesDir) {
-      setRestoreResponse(request, ContainerRestoreResponse.SUCCESS);
+      setOpenPageServerResponse(request, ContainerMigrationProcessResponse.SUCCESS);
       String diagnostics = String.format(
           "Restore: id: %d, dst_cid: %s, dst_imgdir: %s, src_cid: %s, src_host: %s, src_imgdir: %s, result: success",
           destinationContainerId.toString(), destinationImagesDir,
@@ -238,7 +241,7 @@ public class ContainerCR extends AbstractService
     private void onFailure(long id, ContainerId destinationContainerId,
         String destinationImagesDir, ContainerId sourceContainerId,
         String sourceHost, String sourceImagesDir, String msg) {
-      setRestoreResponse(request, ContainerRestoreResponse.FAILURE);
+      setOpenPageServerResponse(request, ContainerMigrationProcessResponse.FAILURE);
       String diagnostics = String.format(
           "Restore: id: %d, dst_cid: %s, dst_imgdir: %s, src_cid: %s, src_host: %s, src_imgdir: %s, result: failure",
           id, destinationContainerId.toString(), destinationImagesDir,
@@ -254,7 +257,7 @@ public class ContainerCR extends AbstractService
   private final Dispatcher dispatcher;
   private final String checkpointDirectory;
   private final String restoreDirectory;
-  private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > checkpointStatusStore;
+  private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, ContainerLaunchContext> > checkpointStatusStore;
   private final ConcurrentHashMap<Pair<Long, Integer>, Integer> restoreStatusStore;
   
   public ContainerCR(Context nmContext, Dispatcher dispatcher) {
@@ -293,9 +296,10 @@ public class ContainerCR extends AbstractService
       executeCheckpoint(checkpointEvent.getContainer(),
           checkpointEvent.getProcessId(), checkpointEvent.getRequest());
       break;
-    case RESTORE:
-      ContainerCRRestoreEvent restoreEvent = (ContainerCRRestoreEvent)event;
-      executeRestore(restoreEvent.getRestoreRequest());
+    case OPEN_PAGE_SERVER:
+      ContainerCROpenPageServerEvent restoreEvent =
+          (ContainerCROpenPageServerEvent)event;
+      executeOpenPageServer(restoreEvent.getRequest());
       break;
     }
   }
@@ -303,63 +307,66 @@ public class ContainerCR extends AbstractService
   public ContainerMigrationProcessResponse getCheckpointResponse(
       ContainerMigrationProcessRequest request) {
     long id = request.getId();
-    Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
-    Pair<Integer, String> value = waitAndGet(key, this.checkpointStatusStore);
+    Pair<Long, Integer> key = Pair.of(
+        id, request.getSourceContainerId().hashCode());
+    Pair<Integer, ContainerLaunchContext> value = waitAndGet(
+        key, this.checkpointStatusStore);
     int status;
-    String directory;
+    ContainerLaunchContext ctx;
     if (value != null) {
       status = value.getLeft();
-      directory = value.getRight();
+      ctx = value.getRight();
     } else {
-      status = ContainerCheckpointResponse.FAILURE;
-      directory = null;
+      status = ContainerMigrationProcessResponse.FAILURE;
+      ctx = null;
     }
-    ContainerCheckpointResponse response = ContainerCheckpointResponse
-        .newInstance(id, status);
-    if (directory != null) {
-      response.setDirectory(directory);
+    ContainerMigrationProcessResponse response =
+        ContainerMigrationProcessResponse.newInstance(id, status);
+    if (ctx != null) {
+      response.setContainerLaunchContext(ctx);
     }
     return response;
   }
   
-  public ContainerRestoreResponse getRestoreResponse(
-      ContainerRestoreRequest request) {
+  public ContainerMigrationProcessResponse getOpenPageServerResponse(
+      ContainerMigrationProcessRequest request) {
     long id = request.getId();
-    Pair<Long, Integer> key = Pair.of(id, request.getContainerId().hashCode());
+    Pair<Long, Integer> key = Pair.of(
+        id, request.getDestinationContainerId().hashCode());
     Integer status = waitAndGet(key, this.restoreStatusStore);
     if (status == null) {
-      status = ContainerRestoreResponse.FAILURE;
+      status = ContainerMigrationProcessResponse.FAILURE;
     }
-    return ContainerRestoreResponse.newInstance(id, status);
+    return ContainerMigrationProcessResponse.newInstance(id, status);
   }
   
   private void executeCheckpoint(Container container, String processId,
-      ContainerCheckpointRequest request) {
+      ContainerMigrationProcessRequest request) {
     Checkpoint checkpoint = new Checkpoint(
         container, processId, request);
     checkpoint.execute();
   }
   
-  private void executeRestore(ContainerRestoreRequest request) {
-    Restore restore = new Restore(request);
+  private void executeOpenPageServer(ContainerMigrationProcessRequest request) {
+    OpenPageServer restore = new OpenPageServer(request);
     restore.execute();
   }
   
-  private void setCheckpointResponse(ContainerCheckpointRequest request,
-      int status, String directory) {
+  private void setCheckpointResponse(ContainerMigrationProcessRequest request,
+      int status, ContainerLaunchContext ctx) {
     Pair<Long, Integer> key = Pair.of(
-        request.getId(), request.getContainerId().hashCode());
-    Pair<Integer, String> value = Pair.of(status, directory);
+        request.getId(), request.getSourceContainerId().hashCode());
+    Pair<Integer, ContainerLaunchContext> value = Pair.of(status, ctx);
     synchronized (this.checkpointStatusStore) {
       this.checkpointStatusStore.put(key, value);
       this.checkpointStatusStore.notifyAll();
     }
   }
   
-  private void setRestoreResponse(ContainerRestoreRequest request,
+  private void setOpenPageServerResponse(ContainerMigrationProcessRequest request,
       int state) {
     Pair<Long, Integer> key = Pair.of(
-        request.getId(), request.getContainerId().hashCode());
+        request.getId(), request.getDestinationContainerId().hashCode());
     synchronized (this.restoreStatusStore) {
       this.restoreStatusStore.put(key, state);
       this.restoreStatusStore.notifyAll();
