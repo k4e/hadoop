@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -36,6 +37,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
+import org.apache.hadoop.yarn.api.records.ContainerRetryContext;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
 import org.apache.hadoop.yarn.api.records.ExecutionTypeRequest;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -167,8 +169,8 @@ public class RMContainerMigrationService extends AbstractService {
     if (openPageServerResponse.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
       throw new YarnException("Open page server not success");
     }
-    if (openPageServerResponse.hasImagesDir()) {
-      throw new YarnException("CheckpointResponse.imagesDir == null");
+    if (!openPageServerResponse.hasImagesDir()) {
+      throw new YarnException("OpenPageServerResponse.imagesDir == null");
     }
     String imagesDir = openPageServerResponse.getImagesDir();
     // チェックポイント リクエストを送信する
@@ -193,16 +195,36 @@ public class RMContainerMigrationService extends AbstractService {
     ContainerLaunchContext launchContext = checkpointResponse
         .getContainerLaunchContext();
     if (launchContext == null) {
-      throw new YarnException("CheckpointResponse.launchContext == null");
+      throw new YarnException("CheckpointResponse.containerLaunchContext == null");
     }
     // リストア コンテナを開始する
+    String restoreCommand = String.format(
+        "criu restore --images-dir %s --restore-detached --restore-sibling --shell-job",
+        imagesDir);
+    List<String> commands = Collections.singletonList(restoreCommand);
+    ContainerLaunchContext newLaunchContext =
+        ContainerLaunchContext.newInstance(
+            launchContext.getLocalResources(),
+            launchContext.getEnvironment(),
+            commands,
+            launchContext.getServiceData(),
+            launchContext.getTokens(),
+            launchContext.getApplicationACLs());
+    {
+      ContainerRetryContext containerRetryContext =
+          launchContext.getContainerRetryContext();
+      if (containerRetryContext != null) {
+        newLaunchContext.setContainerRetryContext(containerRetryContext);
+      }
+      ByteBuffer byteBuffer = launchContext.getTokensConf();
+      if (byteBuffer != null) {
+        newLaunchContext.setTokensConf(byteBuffer);
+      }
+    }
     Token destinationContainerToken = rmDestinationContainer.getContainer()
         .getContainerToken();
-    List<String> commands = Collections.singletonList(String.format(
-        "criu restore --images-dir %s --restore-sibling", imagesDir));
-    launchContext.setCommands(commands);
     StartContainerRequest startContainerRequest = StartContainerRequest
-        .newInstance(launchContext, destinationContainerToken);
+        .newInstance(newLaunchContext, destinationContainerToken);
     StartContainersRequest startContainersRequest = StartContainersRequest
         .newInstance(Collections.singletonList(startContainerRequest));
     StartContainersResponse startContainersResponse =

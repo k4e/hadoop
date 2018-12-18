@@ -139,6 +139,7 @@ public class ContainerCR extends AbstractService
         throws CRException, IOException {
       makeDirectory(imagesDir);
       File logFile = new File(getPath(imagesDir, PAGE_SERVER_LOG));
+      logFile.createNewFile();
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "page-server", "--images-dir", imagesDir,
           "--port", Integer.valueOf(port).toString());

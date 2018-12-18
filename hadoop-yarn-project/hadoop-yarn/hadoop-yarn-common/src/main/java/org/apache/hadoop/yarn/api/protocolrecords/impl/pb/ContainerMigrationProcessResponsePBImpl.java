@@ -28,6 +28,7 @@ public class ContainerMigrationProcessResponsePBImpl extends ContainerMigrationP
   }
   
   public ContainerMigrationProcessResponseProto getProto() {
+    mergeLocalToProto();
     this.proto = viaProto ? proto : builder.build();
     this.viaProto = true;
     return proto;
