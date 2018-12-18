@@ -78,4 +78,16 @@ public abstract class ContainerMigrationProcessRequest {
   @Public
   @Unstable
   public abstract void setDestinationPort(int port);
+  
+  @Public
+  @Unstable
+  public abstract boolean hasImagesDir();
+  
+  @Public
+  @Unstable
+  public abstract String getImagesDir();
+  
+  @Public
+  @Unstable
+  public abstract void setImagesDir(String imagesDir);
 }

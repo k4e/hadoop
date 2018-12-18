@@ -159,20 +159,20 @@ public class RMContainerMigrationService extends AbstractService {
     // 移行先ノードでページサーバを起動する
     ContainerId destinationContainerId =
         rmDestinationContainer.getContainerId();
-    ContainerMigrationProcessRequest openPageServerRequest =
+    ContainerMigrationProcessRequest openReceiverRequest =
         ContainerMigrationProcessRequest.newInstance(migrationId,
         ContainerMigrationProcessType.PRE_RESTORE, sourceContainerId,
         destinationContainerId);
-    openPageServerRequest.setDestinationPort(DEFAULT_PAGE_SERVER_PORT);
-    ContainerMigrationProcessResponse openPageServerResponse =
-        sourceContainerManager.processContainerMigration(openPageServerRequest);
-    if (openPageServerResponse.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
-      throw new YarnException("Open page server not success");
+    openReceiverRequest.setDestinationPort(DEFAULT_PAGE_SERVER_PORT);
+    ContainerMigrationProcessResponse openReceiver =
+        sourceContainerManager.processContainerMigration(openReceiverRequest);
+    if (openReceiver.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
+      throw new YarnException("OpenReceiver not success");
     }
-    if (!openPageServerResponse.hasImagesDir()) {
+    if (!openReceiver.hasImagesDir()) {
       throw new YarnException("OpenPageServerResponse.imagesDir == null");
     }
-    String imagesDir = openPageServerResponse.getImagesDir();
+    String imagesDir = openReceiver.getImagesDir();
     // チェックポイント リクエストを送信する
     InetAddress destinationAddress;
     try {
@@ -187,6 +187,7 @@ public class RMContainerMigrationService extends AbstractService {
         destinationContainerId);
     checkpointRequest.setDestinationAddress(destinationAddress.getHostAddress());
     checkpointRequest.setDestinationPort(DEFAULT_PAGE_SERVER_PORT);
+    checkpointRequest.setImagesDir(imagesDir);
     ContainerMigrationProcessResponse checkpointResponse =
         sourceContainerManager.processContainerMigration(checkpointRequest);
     if (checkpointResponse.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
@@ -230,8 +231,8 @@ public class RMContainerMigrationService extends AbstractService {
     StartContainersResponse startContainersResponse =
         destinationContainerManager.startContainers(startContainersRequest);
     // 終了処理を行う
-    boolean completing = isCompleting(checkpointResponse,
-        openPageServerResponse, startContainersResponse, destinationContainerId);
+    boolean completing = checkCompleting(checkpointResponse,
+        openReceiver, startContainersResponse, destinationContainerId);
     if (completing) {
       // TODO 成功時の後処理
     }
@@ -297,7 +298,7 @@ public class RMContainerMigrationService extends AbstractService {
     return YarnRPC.create(this.rmContext.getYarnConfiguration());
   }
   
-  private boolean isCompleting(
+  private boolean checkCompleting(
       ContainerMigrationProcessResponse preCheckpointResponse,
       ContainerMigrationProcessResponse preRestoreResponse,
       StartContainersResponse startContainersResponse,

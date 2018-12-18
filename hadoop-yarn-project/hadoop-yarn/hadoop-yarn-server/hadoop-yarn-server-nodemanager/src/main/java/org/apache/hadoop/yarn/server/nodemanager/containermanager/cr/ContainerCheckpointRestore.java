@@ -2,15 +2,26 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.cr;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
+import org.apache.commons.configuration2.HierarchicalConfiguration;
+import org.apache.commons.configuration2.XMLConfiguration;
+import org.apache.commons.configuration2.ex.ConfigurationException;
+import org.apache.commons.configuration2.tree.ImmutableNode;
+import org.apache.commons.configuration2.tree.xpath.XPathExpressionEngine;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.net.ftp.FTP;
+import org.apache.commons.net.ftp.FTPClient;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
@@ -25,11 +36,13 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ContainerCR extends AbstractService
+public class ContainerCheckpointRestore extends AbstractService
     implements EventHandler<ContainerCREvent> {
 
-  private final static Logger LOG = LoggerFactory.getLogger(ContainerCR.class);
-  private final static String IMGDIR = "tmp/crimg";
+  private final static Logger LOG = LoggerFactory.getLogger(ContainerCheckpointRestore.class);
+  private final static String CONFIGURATION_FILE = "etc/hadoop/migration-settings.xml";
+  private final static String IMG_SRC_DIR = "tmp/imgsrc";
+  private final static String IMG_DST_DIR = "tmp/imgdst";
   private final static String PAGE_SERVER_LOG = "criu.pgsv.log";
   private final static long WAIT_TIMEOUT_MS = 30000;
   
@@ -51,10 +64,12 @@ public class ContainerCR extends AbstractService
           .getContainerID();
       final int port = request.getDestinationPort();
       final String address = request.getDestinationAddress();
+      final String imagesDirSrc = getImagesSrcDst(id, containerId);
+      final String imagesDirDst = request.getImagesDir();
       final String user = container.getUser();
       final ContainerLaunchContext ctx = container.getLaunchContext();
       try {
-        executeInternal(id, containerId, address, port);
+        executeInternal(id, containerId, address, port, imagesDirSrc, imagesDirDst);
         onSuccess(id, ctx, processId, containerId, user, address);
       } catch(CRException | IOException e) {
         LOG.error(ExceptionUtils.getStackTrace(e));
@@ -63,10 +78,13 @@ public class ContainerCR extends AbstractService
     }
     
     private void executeInternal(final long id, final ContainerId containerId,
-        final String address, final int port) throws CRException, IOException {
+        final String address, final int port, final String imagesDirSrc,
+        final String imagesDirDst) throws CRException, IOException {
+      File imagesDirSrcFile = new File(imagesDirSrc);
+      Pair<String, String> ftpUserPair = getFtpUser(address);
       ProcessBuilder processBuilder = new ProcessBuilder(
-          "criu", "dump", "--page-server", "--address", address, "--port",
-          Integer.valueOf(port).toString(),
+          "criu", "dump", "--page-server", "--images-dir", imagesDirSrc,
+          "--address", address, "--port", Integer.valueOf(port).toString(),
           "--tree", processId, "--leave-stopped", "--shell-job");
       processBuilder.redirectErrorStream(true);
       int exitValue;
@@ -87,14 +105,39 @@ public class ContainerCR extends AbstractService
         throw new CRException(
             String.format("criu dump returned %d", exitValue));
       }
+      FTPClient ftpClient = new FTPClient();
+      try {
+        ftpClient.connect(address);
+        ftpClient.login(ftpUserPair.getLeft(), ftpUserPair.getRight());
+        ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
+        if (!ftpClient.changeWorkingDirectory(imagesDirDst)) {
+          throw new CRException("FTP reply (cd): " + ftpClient.getReplyString());
+        }
+        File[] srcImagesFiles = imagesDirSrcFile.listFiles();
+        for (File file : srcImagesFiles) {
+          FileInputStream fileIn = new FileInputStream(file);
+          try {
+            if (!ftpClient.storeFile(file.getName(), fileIn)) {
+              throw new CRException("FTP reply (store): " + ftpClient.getReplyString());
+            }
+          } finally {
+            fileIn.close();
+          }
+        }
+      } finally {
+        if (ftpClient.isConnected()) {
+          ftpClient.quit();
+        }
+      }
     }
     
     private void onSuccess(long id, ContainerLaunchContext ctx,
-        String processId, ContainerId containerId, String user, String address) {
+        String processId, ContainerId containerId, String user,
+        String address) {
       setCheckpointResponse(
           request, ContainerMigrationProcessResponse.SUCCESS, ctx);
       String diagnostics = String.format(
-          "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: success",
+          "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, addr: %s, result: success",
           id, containerId, processId, user, address);
       LOG.info(diagnostics);
       dispatcher.getEventHandler().handle(
@@ -106,7 +149,7 @@ public class ContainerCR extends AbstractService
       setCheckpointResponse(
           request, ContainerMigrationProcessResponse.FAILURE, null);
       String diagnostics = String.format(
-          "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, imgdir: %s, result: failure",
+          "Checkpoint: id: %d, cid: %s, pid: %s, user: %s, addr: %s, result: failure",
           id, containerId, processId, user, address);
       LOG.error(diagnostics + "; " + msg);
       dispatcher.getEventHandler().handle(
@@ -114,10 +157,10 @@ public class ContainerCR extends AbstractService
     }
   }
   
-  class OpenPageServer {
+  class OpenReceiver {
     private final ContainerMigrationProcessRequest request;
     
-    public OpenPageServer(ContainerMigrationProcessRequest request) {
+    public OpenReceiver(ContainerMigrationProcessRequest request) {
       this.request = request;
     }
     
@@ -125,7 +168,7 @@ public class ContainerCR extends AbstractService
       long id = request.getId();
       final ContainerId sourceContainerId = request.getSourceContainerId();
       final int destinationPort = request.getDestinationPort();
-      final String imagesDir = getImagesDir(id, sourceContainerId);
+      final String imagesDir = getImagesDirDst(id, sourceContainerId);
       try {
         executeInternal(destinationPort, imagesDir);
         onSuccess(id, destinationPort, imagesDir);
@@ -146,23 +189,23 @@ public class ContainerCR extends AbstractService
       processBuilder.redirectErrorStream(true);
       processBuilder.redirectInput(logFile);
       Process process = processBuilder.start();
-      pageServerProcess.push(process);
+      receivers.push(process);
     }
     
     private void onSuccess(long id, int port, String imagesDir) {
-      setOpenPageServerResponse(
+      setOpenReceiverResponse(
           request, ContainerMigrationProcessResponse.SUCCESS, imagesDir);
       String diagnostics = String.format(
-          "OpenPageServer: id: %d, port: %d, imgdir: %s, result: success",
+          "OpenReceiver: id: %d, port: %d, imgdir: %s, result: success",
           id, port, imagesDir);
       LOG.info(diagnostics);
     }
     
     private void onFailure(long id, int port, String imagesDir, String msg) {
-      setOpenPageServerResponse(
+      setOpenReceiverResponse(
           request, ContainerMigrationProcessResponse.FAILURE, null);
       String diagnostics = String.format(
-          "OpenPageServer: id: %d, port: %d, imgdir: %s, result: failure",
+          "OpenReceiver: id: %d, port: %d, imgdir: %s, result: failure",
           id, port, imagesDir);
       LOG.error(diagnostics + "; " + msg);
     }
@@ -170,38 +213,48 @@ public class ContainerCR extends AbstractService
   
   private final Context nmContext;
   private final Dispatcher dispatcher;
-  private final String imagesDirHome;
-  private final ConcurrentLinkedDeque<Process> pageServerProcess;
+  private final String configurationPath;
+  private final String imagesDirSrcHome;
+  private final String imagesDirDstHome;
+  private final Map<String, Pair<String, String> > ftpUsers;
+  private final ConcurrentLinkedDeque<Process> receivers;
   private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, ContainerLaunchContext> > checkpointStatusStore;
-  private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > openPageServerStatusStore;
+  private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > openReceiverStatusStore;
+  private Pair<String, String> ftpUserGlobal = null;
   
-  public ContainerCR(Context nmContext, Dispatcher dispatcher) {
-    super(ContainerCR.class.getName());
+  public ContainerCheckpointRestore(Context nmContext, Dispatcher dispatcher) {
+    super(ContainerCheckpointRestore.class.getName());
     this.nmContext = nmContext;
     this.dispatcher = dispatcher;
     String hadoopHome = System.getenv(Shell.ENV_HADOOP_HOME);
     if (hadoopHome != null) {
       hadoopHome = StringUtils.strip(hadoopHome, "/");
-      this.imagesDirHome = String.format("/%s/%s", hadoopHome, IMGDIR);
+      this.configurationPath = String.format("/%s/%s", hadoopHome, CONFIGURATION_FILE);
+      this.imagesDirSrcHome = String.format("/%s/%s", hadoopHome, IMG_SRC_DIR);
+      this.imagesDirDstHome = String.format("/%s/%s", hadoopHome, IMG_DST_DIR);
     } else {
-      this.imagesDirHome = String.format("/%s", IMGDIR);
+      this.configurationPath = String.format("/%s", CONFIGURATION_FILE);
+      this.imagesDirSrcHome = String.format("/%s", IMG_SRC_DIR);
+      this.imagesDirDstHome = String.format("/%s", IMG_DST_DIR);
     }
-    this.pageServerProcess = new ConcurrentLinkedDeque<>();
+    this.ftpUsers = new HashMap<>();
+    this.receivers = new ConcurrentLinkedDeque<>();
     this.checkpointStatusStore = new ConcurrentHashMap<>();
-    this.openPageServerStatusStore = new ConcurrentHashMap<>();
+    this.openReceiverStatusStore = new ConcurrentHashMap<>();
   }
   
   @Override
   public void serviceStart() throws Exception {
     super.serviceStart();
+    loadConfiguration();
   }
   
   @Override
   public void serviceStop() throws Exception {
     super.serviceStop();
-    synchronized (this.pageServerProcess) {
-      while (!this.pageServerProcess.isEmpty()) {
-        Process process = this.pageServerProcess.pop();
+    synchronized (this.receivers) {
+      while (!this.receivers.isEmpty()) {
+        Process process = this.receivers.pop();
         if (process.isAlive()) {
           process.destroy();
         }
@@ -218,10 +271,10 @@ public class ContainerCR extends AbstractService
       executeCheckpoint(checkpointEvent.getContainer(),
           checkpointEvent.getProcessId(), checkpointEvent.getRequest());
       break;
-    case OPEN_PAGE_SERVER:
-      ContainerCROpenPageServerEvent restoreEvent =
-          (ContainerCROpenPageServerEvent)event;
-      executeOpenPageServer(restoreEvent.getRequest());
+    case OPEN_RECEIVER:
+      ContainerCROpenReceiver restoreEvent =
+          (ContainerCROpenReceiver)event;
+      executeOpenReceiver(restoreEvent.getRequest());
       break;
     }
   }
@@ -247,11 +300,11 @@ public class ContainerCR extends AbstractService
     }
   }
   
-  public ContainerMigrationProcessResponse getOpenPageServerResponse(
+  public ContainerMigrationProcessResponse getOpenReceiverResponse(
       ContainerMigrationProcessRequest request) {
     long id = request.getId();
     Pair<Long, Integer> key = Pair.of(id, request.hashCode());
-    Pair<Integer, String> value = waitAndGet(key, this.openPageServerStatusStore);
+    Pair<Integer, String> value = waitAndGet(key, this.openReceiverStatusStore);
     if (value != null) {
       int status = value.getLeft();
       ContainerMigrationProcessResponse response =
@@ -267,15 +320,45 @@ public class ContainerCR extends AbstractService
     }
   }
   
+  private void loadConfiguration() throws IOException, ConfigurationException {
+    FileInputStream confIn;
+    try {
+      confIn = new FileInputStream(this.configurationPath);
+    } catch(FileNotFoundException e) {
+      return;
+    }
+    XMLConfiguration xmlConf = new XMLConfiguration();
+    try {
+      xmlConf.read(confIn);
+    } finally {
+      confIn.close();
+    }
+    xmlConf.setExpressionEngine(new XPathExpressionEngine());
+    List<HierarchicalConfiguration<ImmutableNode> > ftNodes =
+        xmlConf.childConfigurationsAt("migration/file-transfer/nodes");
+    for(HierarchicalConfiguration<ImmutableNode> c : ftNodes) {
+      String address = c.getString("node/address");
+      String username = c.getString("node/username");
+      String password = c.getString("node/password");
+      LOG.info(String.format("Read FTP user info (%s, %s)", address, username));
+      Pair<String, String> pair = Pair.of(username, password);
+      if ("*".equals(address)) {
+        this.ftpUserGlobal = pair;
+      } else {
+        this.ftpUsers.put(address, pair);
+      }
+    }
+  }
+  
   private void executeCheckpoint(Container container, String processId,
       ContainerMigrationProcessRequest request) {
     Checkpoint checkpoint = new Checkpoint(container, processId, request);
     checkpoint.execute();
   }
   
-  private void executeOpenPageServer(ContainerMigrationProcessRequest request) {
-    OpenPageServer restore = new OpenPageServer(request);
-    restore.execute();
+  private void executeOpenReceiver(ContainerMigrationProcessRequest request) {
+    OpenReceiver receiver = new OpenReceiver(request);
+    receiver.execute();
   }
   
   private void setCheckpointResponse(ContainerMigrationProcessRequest request,
@@ -288,13 +371,13 @@ public class ContainerCR extends AbstractService
     }
   }
   
-  private void setOpenPageServerResponse(ContainerMigrationProcessRequest request,
+  private void setOpenReceiverResponse(ContainerMigrationProcessRequest request,
       int state, String imagesDir) {
     Pair<Long, Integer> key = Pair.of(request.getId(), request.hashCode());
     Pair<Integer, String> value = Pair.of(state, imagesDir);
-    synchronized (this.openPageServerStatusStore) {
-      this.openPageServerStatusStore.put(key, value);
-      this.openPageServerStatusStore.notifyAll();
+    synchronized (this.openReceiverStatusStore) {
+      this.openReceiverStatusStore.put(key, value);
+      this.openReceiverStatusStore.notifyAll();
     }
   }
   
@@ -310,8 +393,13 @@ public class ContainerCR extends AbstractService
     return StringUtils.stripEnd(p, "/") + sb.toString();
   }
   
-  private String getImagesDir(long id, ContainerId containerId) {
-    return getPath(imagesDirHome,
+  private String getImagesSrcDst(long id, ContainerId containerId) {
+    return getPath(imagesDirSrcHome,
+        String.format("%d_%s", id, containerId.toString()));
+  }
+  
+  private String getImagesDirDst(long id, ContainerId containerId) {
+    return getPath(imagesDirDstHome,
         String.format("%d_%s", id, containerId.toString()));
   }
   
@@ -337,5 +425,15 @@ public class ContainerCR extends AbstractService
       }
     }
     return cncrntMap.get(key);
+  }
+  
+  private Pair<String, String> getFtpUser(String address) throws CRException {
+    if (this.ftpUsers.containsKey(address)) {
+      return this.ftpUsers.get(address);
+    } else if (this.ftpUserGlobal != null) {
+      return this.ftpUserGlobal;
+    } else {
+      throw new CRException("No FTP user info (address: " + address + ")");
+    }
   }
 }

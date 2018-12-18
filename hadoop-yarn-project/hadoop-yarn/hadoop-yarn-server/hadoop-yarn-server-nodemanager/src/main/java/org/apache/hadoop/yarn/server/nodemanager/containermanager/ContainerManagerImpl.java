@@ -21,9 +21,9 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.UpdateContainerTokenEvent;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCR;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCheckpointRestore;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCREventType;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCROpenPageServerEvent;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCROpenReceiver;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.event.LogHandlerTokenUpdatedEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.scheduler.ContainerSchedulerEvent;
 import org.slf4j.Logger;
@@ -231,7 +231,7 @@ public class ContainerManagerImpl extends CompositeService implements
 
   private long waitForContainersOnShutdownMillis;
   
-  private ContainerCR containerCR;
+  private ContainerCheckpointRestore containerCheckpointRestore;
 
   // NM metrics publisher is set only if the timeline service v.2 is enabled
   private NMTimelinePublisher nmMetricsPublisher;
@@ -280,8 +280,8 @@ public class ContainerManagerImpl extends CompositeService implements
     this.containersMonitor = createContainersMonitor(exec);
     addService(this.containersMonitor);
     
-    this.containerCR = new ContainerCR(context, dispatcher);
-    addService(this.containerCR);
+    this.containerCheckpointRestore = new ContainerCheckpointRestore(context, dispatcher);
+    addService(this.containerCheckpointRestore);
 
     dispatcher.register(ContainerEventType.class,
         new ContainerEventDispatcher());
@@ -294,7 +294,7 @@ public class ContainerManagerImpl extends CompositeService implements
     dispatcher.register(ContainersMonitorEventType.class, containersMonitor);
     dispatcher.register(ContainersLauncherEventType.class, containersLauncher);
     dispatcher.register(ContainerSchedulerEventType.class, containerScheduler);
-    dispatcher.register(ContainerCREventType.class, containerCR);
+    dispatcher.register(ContainerCREventType.class, containerCheckpointRestore);
     
     addService(dispatcher);
 
@@ -1931,8 +1931,8 @@ public class ContainerManagerImpl extends CompositeService implements
   }
   
   @Override
-  public ContainerCR getContainerCR() {
-    return this.containerCR;
+  public ContainerCheckpointRestore getContainerCheckpointRestore() {
+    return this.containerCheckpointRestore;
   }
   
   @Override
@@ -1950,6 +1950,11 @@ public class ContainerManagerImpl extends CompositeService implements
     ContainerMigrationProcessResponse response = ContainerMigrationProcessResponse
         .newInstance(id, ContainerMigrationProcessResponse.FAILURE);
     switch (processType) {
+    case PRE_RESTORE:
+      this.dispatcher.getEventHandler().handle(
+          new ContainerCROpenReceiver(request));
+      response = this.containerCheckpointRestore.getOpenReceiverResponse(request);
+      break;
     case PRE_CHECKPOINT:
       Container sourceContainer = this.context.getContainers()
           .get(sourceContainerId);
@@ -1960,12 +1965,7 @@ public class ContainerManagerImpl extends CompositeService implements
       }
       this.dispatcher.getEventHandler().handle(
           new CheckpointContainersLauncherEvent(sourceContainer, request));
-      response = this.containerCR.getCheckpointResponse(request);
-      break;
-    case PRE_RESTORE:
-      this.dispatcher.getEventHandler().handle(
-          new ContainerCROpenPageServerEvent(request));
-      response = this.containerCR.getOpenPageServerResponse(request);
+      response = this.containerCheckpointRestore.getCheckpointResponse(request);
       break;
     case POST_CHECKPOINT:
       break;

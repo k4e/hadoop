@@ -106,7 +106,6 @@ public class ContainerMigrationProcessRequestPBImpl extends ContainerMigrationPr
     this.destinationContainerId = destinationContainerId;
   }
   
-  
   @Override
   public boolean hasDestinationAddress() {
     ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
@@ -141,6 +140,24 @@ public class ContainerMigrationProcessRequestPBImpl extends ContainerMigrationPr
   public void setDestinationPort(int destinationPort) {
     maybeInitBuilder();
     this.builder.setDestinationPort(destinationPort);
+  }
+  
+  @Override
+  public boolean hasImagesDir() {
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
+    return p.hasImagesDir();
+  }
+  
+  @Override
+  public String getImagesDir() {
+    ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getImagesDir();
+  }
+  
+  @Override
+  public void setImagesDir(String imagesDir) {
+    maybeInitBuilder();
+    this.builder.setImagesDir(imagesDir);
   }
   
   @Override

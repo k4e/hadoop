@@ -429,6 +429,7 @@ message ContainerMigrationProcessRequestProto {
   required ContainerIdProto destination_container_id = 4;
   optional string destination_address = 5;
   optional int32 destination_port = 6;
+  optional string images_dir = 7;
 }
 
 message ContainerMigrationProcessResponseProto {
