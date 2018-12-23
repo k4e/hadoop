@@ -4,17 +4,25 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.InetAddress;
+import java.nio.file.Files;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.nio.file.attribute.UserPrincipalLookupService;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 import org.apache.commons.configuration2.HierarchicalConfiguration;
 import org.apache.commons.configuration2.XMLConfiguration;
 import org.apache.commons.configuration2.ex.ConfigurationException;
+import org.apache.commons.configuration2.io.FileHandler;
 import org.apache.commons.configuration2.tree.ImmutableNode;
 import org.apache.commons.configuration2.tree.xpath.XPathExpressionEngine;
 import org.apache.commons.lang3.StringUtils;
@@ -80,6 +88,9 @@ public class ContainerCheckpointRestore extends AbstractService
     private void executeInternal(final long id, final ContainerId containerId,
         final String address, final int port, final String imagesDirSrc,
         final String imagesDirDst) throws CRException, IOException {
+      if (!makeDirectory(imagesDirSrc)) {
+        throw new CRException("Make directory failred: " + imagesDirSrc);
+      }
       File imagesDirSrcFile = new File(imagesDirSrc);
       Pair<String, String> ftpUserPair = getFtpUser(address);
       ProcessBuilder processBuilder = new ProcessBuilder(
@@ -181,13 +192,17 @@ public class ContainerCheckpointRestore extends AbstractService
     private void executeInternal(int port, String imagesDir)
         throws CRException, IOException {
       makeDirectory(imagesDir);
+      File imagesDirFile = new File(imagesDir);
+      imagesDirFile.setReadable(true, false);
+      imagesDirFile.setWritable(true, false);
+      imagesDirFile.setExecutable(true, false);
       File logFile = new File(getPath(imagesDir, PAGE_SERVER_LOG));
       logFile.createNewFile();
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "page-server", "--images-dir", imagesDir,
           "--port", Integer.valueOf(port).toString());
       processBuilder.redirectErrorStream(true);
-      processBuilder.redirectInput(logFile);
+      processBuilder.redirectOutput(logFile);
       Process process = processBuilder.start();
       receivers.push(process);
     }
@@ -321,26 +336,18 @@ public class ContainerCheckpointRestore extends AbstractService
   }
   
   private void loadConfiguration() throws IOException, ConfigurationException {
-    FileInputStream confIn;
-    try {
-      confIn = new FileInputStream(this.configurationPath);
-    } catch(FileNotFoundException e) {
-      return;
-    }
     XMLConfiguration xmlConf = new XMLConfiguration();
-    try {
-      xmlConf.read(confIn);
-    } finally {
-      confIn.close();
-    }
+    FileHandler fileHandler = new FileHandler(xmlConf);
+    fileHandler.load(this.configurationPath);
     xmlConf.setExpressionEngine(new XPathExpressionEngine());
     List<HierarchicalConfiguration<ImmutableNode> > ftNodes =
-        xmlConf.childConfigurationsAt("migration/file-transfer/nodes");
+        xmlConf.childConfigurationsAt("file-transfer/nodes");
     for(HierarchicalConfiguration<ImmutableNode> c : ftNodes) {
-      String address = c.getString("node/address");
-      String username = c.getString("node/username");
-      String password = c.getString("node/password");
-      LOG.info(String.format("Read FTP user info (%s, %s)", address, username));
+      String address = c.getString("address");
+      String username = c.getString("username");
+      String password = c.getString("password");
+      LOG.info(String.format("Read FTP user info (address=%s, username=%s)",
+          address, username));
       Pair<String, String> pair = Pair.of(username, password);
       if ("*".equals(address)) {
         this.ftpUserGlobal = pair;

@@ -200,7 +200,7 @@ public class RMContainerMigrationService extends AbstractService {
     }
     // リストア コンテナを開始する
     String restoreCommand = String.format(
-        "criu restore --images-dir %s --restore-detached --restore-sibling --shell-job",
+        "unshare -p -m --fork --mount-proc criu restore --images-dir %s --restore-detached --restore-sibling --shell-job",
         imagesDir);
     List<String> commands = Collections.singletonList(restoreCommand);
     ContainerLaunchContext newLaunchContext =
