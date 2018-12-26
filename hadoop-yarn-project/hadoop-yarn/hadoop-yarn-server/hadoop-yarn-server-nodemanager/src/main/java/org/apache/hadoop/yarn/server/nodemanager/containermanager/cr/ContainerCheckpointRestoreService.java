@@ -44,10 +44,10 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ContainerCheckpointRestore extends AbstractService
+public class ContainerCheckpointRestoreService extends AbstractService
     implements EventHandler<ContainerCREvent> {
 
-  private final static Logger LOG = LoggerFactory.getLogger(ContainerCheckpointRestore.class);
+  private final static Logger LOG = LoggerFactory.getLogger(ContainerCheckpointRestoreService.class);
   private final static String CONFIGURATION_FILE = "etc/hadoop/migration-settings.xml";
   private final static String IMG_SRC_DIR = "tmp/imgsrc";
   private final static String IMG_DST_DIR = "tmp/imgdst";
@@ -237,8 +237,8 @@ public class ContainerCheckpointRestore extends AbstractService
   private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > openReceiverStatusStore;
   private Pair<String, String> ftpUserGlobal = null;
   
-  public ContainerCheckpointRestore(Context nmContext, Dispatcher dispatcher) {
-    super(ContainerCheckpointRestore.class.getName());
+  public ContainerCheckpointRestoreService(Context nmContext, Dispatcher dispatcher) {
+    super(ContainerCheckpointRestoreService.class.getName());
     this.nmContext = nmContext;
     this.dispatcher = dispatcher;
     String hadoopHome = System.getenv(Shell.ENV_HADOOP_HOME);

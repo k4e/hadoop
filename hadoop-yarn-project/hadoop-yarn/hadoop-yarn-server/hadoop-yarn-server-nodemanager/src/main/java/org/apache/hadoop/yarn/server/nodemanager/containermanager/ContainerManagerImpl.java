@@ -21,7 +21,7 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.UpdateContainerTokenEvent;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCheckpointRestore;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCheckpointRestoreService;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCREventType;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCROpenReceiver;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.event.LogHandlerTokenUpdatedEvent;
@@ -231,7 +231,7 @@ public class ContainerManagerImpl extends CompositeService implements
 
   private long waitForContainersOnShutdownMillis;
   
-  private ContainerCheckpointRestore containerCheckpointRestore;
+  private ContainerCheckpointRestoreService containerCheckpointRestore;
 
   // NM metrics publisher is set only if the timeline service v.2 is enabled
   private NMTimelinePublisher nmMetricsPublisher;
@@ -280,7 +280,7 @@ public class ContainerManagerImpl extends CompositeService implements
     this.containersMonitor = createContainersMonitor(exec);
     addService(this.containersMonitor);
     
-    this.containerCheckpointRestore = new ContainerCheckpointRestore(context, dispatcher);
+    this.containerCheckpointRestore = new ContainerCheckpointRestoreService(context, dispatcher);
     addService(this.containerCheckpointRestore);
 
     dispatcher.register(ContainerEventType.class,
@@ -1931,7 +1931,7 @@ public class ContainerManagerImpl extends CompositeService implements
   }
   
   @Override
-  public ContainerCheckpointRestore getContainerCheckpointRestore() {
+  public ContainerCheckpointRestoreService getContainerCheckpointRestore() {
     return this.containerCheckpointRestore;
   }
   

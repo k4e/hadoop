@@ -200,7 +200,7 @@ public class RMContainerMigrationService extends AbstractService {
     }
     // リストア コンテナを開始する
     String restoreCommand = String.format(
-        "unshare --pid --mount --net --fork --mount-proc criu restore --images-dir %s --shell-job -vvvv",
+        "unshare --pid --mount --fork --mount-proc criu restore --images-dir %s --shell-job -vvvv",
         imagesDir);
     List<String> commands = Collections.singletonList(restoreCommand);
     ContainerLaunchContext newLaunchContext =
@@ -285,10 +285,6 @@ public class RMContainerMigrationService extends AbstractService {
     org.apache.hadoop.security.token.Token<TokenIdentifier> securityToken =
         ConverterUtils.convertFromYarn(token, address);
     currentUser.addToken(securityToken);
-    LOG.info("currentUser = " + currentUser.toString());
-    LOG.info("user = " + user);
-    LOG.info("token = " + token.toString());
-    LOG.info("securityToken = " + securityToken.toString());
     return NMProxy.createNMProxy(rmContext.getYarnConfiguration(),
         ContainerManagementProtocol.class, currentUser, rpc, address);
   }
