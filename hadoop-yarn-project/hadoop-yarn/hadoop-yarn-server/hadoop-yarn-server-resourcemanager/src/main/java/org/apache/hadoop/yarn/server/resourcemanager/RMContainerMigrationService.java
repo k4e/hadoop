@@ -200,7 +200,7 @@ public class RMContainerMigrationService extends AbstractService {
     }
     // リストア コンテナを開始する
     String restoreCommand = String.format(
-        "unshare --pid --mount --fork --mount-proc criu restore --images-dir %s --shell-job -vvvv",
+        "unshare --pid --mount --fork --mount-proc criu restore --images-dir %s --tcp-established --tcp-close --shell-job -vvvv",
         imagesDir);
     List<String> commands = Collections.singletonList(restoreCommand);
     ContainerLaunchContext newLaunchContext =
@@ -211,16 +211,14 @@ public class RMContainerMigrationService extends AbstractService {
             launchContext.getServiceData(),
             launchContext.getTokens(),
             launchContext.getApplicationACLs());
-    {
-      ContainerRetryContext containerRetryContext =
-          launchContext.getContainerRetryContext();
-      if (containerRetryContext != null) {
-        newLaunchContext.setContainerRetryContext(containerRetryContext);
-      }
-      ByteBuffer byteBuffer = launchContext.getTokensConf();
-      if (byteBuffer != null) {
-        newLaunchContext.setTokensConf(byteBuffer);
-      }
+    ContainerRetryContext containerRetryContext =
+        launchContext.getContainerRetryContext();
+    if (containerRetryContext != null) {
+      newLaunchContext.setContainerRetryContext(containerRetryContext);
+    }
+    ByteBuffer byteBuffer = launchContext.getTokensConf();
+    if (byteBuffer != null) {
+      newLaunchContext.setTokensConf(byteBuffer);
     }
     Token destinationContainerToken = rmDestinationContainer.getContainer()
         .getContainerToken();

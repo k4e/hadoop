@@ -96,7 +96,8 @@ public class ContainerCheckpointRestoreService extends AbstractService
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "dump", "--page-server", "--images-dir", imagesDirSrc,
           "--address", address, "--port", Integer.valueOf(port).toString(),
-          "--tree", processId, "--leave-stopped", "--shell-job");
+          "--tree", processId, "--leave-stopped", "--tcp-established",
+          "--shell-job");
       processBuilder.redirectErrorStream(true);
       int exitValue;
       try {
