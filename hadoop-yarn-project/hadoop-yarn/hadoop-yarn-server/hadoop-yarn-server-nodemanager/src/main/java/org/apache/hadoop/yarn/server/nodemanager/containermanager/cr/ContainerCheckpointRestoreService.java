@@ -348,7 +348,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
     fileHandler.load(this.configurationPath);
     xmlConf.setExpressionEngine(new XPathExpressionEngine());
     List<HierarchicalConfiguration<ImmutableNode> > ftNodes =
-        xmlConf.childConfigurationsAt("file-transfer/nodes");
+        xmlConf.childConfigurationsAt("login/nodes");
     for(HierarchicalConfiguration<ImmutableNode> c : ftNodes) {
       String address = c.getString("address");
       String username = c.getString("username");
