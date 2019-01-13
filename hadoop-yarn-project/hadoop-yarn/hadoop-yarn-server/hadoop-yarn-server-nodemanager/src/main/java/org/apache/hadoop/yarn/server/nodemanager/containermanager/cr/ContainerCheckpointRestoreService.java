@@ -74,7 +74,6 @@ public class ContainerCheckpointRestoreService extends AbstractService
     }
     
     public void execute() {
-      LOG.info("workDir: " + container.getWorkDir());
       final long id = request.getId();
       ContainerId containerId = container.getContainerTokenIdentifier()
           .getContainerID();
@@ -128,6 +127,8 @@ public class ContainerCheckpointRestoreService extends AbstractService
       rsync(imagesDirSrc + "/", username, address, imagesDirDst);
       String logDir = container.getLogDir();
       rsync(logDir + "/", username, address, logDir);
+      String workDir = container.getWorkDir();
+      rsync(workDir + "/", username, address, workDir);
     }
 
     private void rsync(String srcDir, String username, String address,
