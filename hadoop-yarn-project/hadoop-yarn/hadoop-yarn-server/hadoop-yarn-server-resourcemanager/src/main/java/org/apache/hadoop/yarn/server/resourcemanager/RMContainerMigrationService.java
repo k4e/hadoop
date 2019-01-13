@@ -165,7 +165,7 @@ public class RMContainerMigrationService extends AbstractService {
         destinationContainerId);
     openReceiverRequest.setDestinationPort(DEFAULT_PAGE_SERVER_PORT);
     ContainerMigrationProcessResponse openReceiver =
-        sourceContainerManager.processContainerMigration(openReceiverRequest);
+        destinationContainerManager.processContainerMigration(openReceiverRequest);
     if (openReceiver.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
       throw new YarnException("OpenReceiver not success");
     }
