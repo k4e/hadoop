@@ -28,8 +28,6 @@ import org.apache.commons.configuration2.tree.xpath.XPathExpressionEngine;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.commons.net.ftp.FTP;
-import org.apache.commons.net.ftp.FTPClient;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerMigrationProcessRequest;
@@ -43,6 +41,15 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerDiagnosticsUpdateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.github.fracpete.processoutput4j.output.CollectingProcessOutput;
+import com.github.fracpete.rsync4j.RSync;
+import com.google.common.collect.Sets;
+import com.jcraft.jsch.Channel;
+import com.jcraft.jsch.ChannelSftp;
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.JSchException;
+import com.jcraft.jsch.Session;
 
 public class ContainerCheckpointRestoreService extends AbstractService
     implements EventHandler<ContainerCREvent> {
@@ -67,6 +74,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
     }
     
     public void execute() {
+      LOG.info("workDir: " + container.getWorkDir());
       final long id = request.getId();
       ContainerId containerId = container.getContainerTokenIdentifier()
           .getContainerID();
@@ -91,8 +99,8 @@ public class ContainerCheckpointRestoreService extends AbstractService
       if (!makeDirectory(imagesDirSrc)) {
         throw new CRException("Make directory failred: " + imagesDirSrc);
       }
-      File imagesDirSrcFile = new File(imagesDirSrc);
-      Pair<String, String> ftpUserPair = getFtpUser(address);
+      Pair<String, String> loginCred = getLoginCredential(address);
+      String username = loginCred.getLeft();
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "dump", "--page-server", "--images-dir", imagesDirSrc,
           "--address", address, "--port", Integer.valueOf(port).toString(),
@@ -117,29 +125,26 @@ public class ContainerCheckpointRestoreService extends AbstractService
         throw new CRException(
             String.format("criu dump returned %d", exitValue));
       }
-      FTPClient ftpClient = new FTPClient();
+      rsync(imagesDirSrc + "/", username, address, imagesDirDst);
+      String logDir = container.getLogDir();
+      rsync(logDir + "/", username, address, logDir);
+    }
+
+    private void rsync(String srcDir, String username, String address,
+        String dstDir) throws CRException {
+      String url = String.format("%s@%s:%s", username, address, dstDir);
+      LOG.info(String.format("rsync %s %s", srcDir, url));
+      RSync rsync = new RSync().archive(true).source(srcDir)
+          .destination(url);
       try {
-        ftpClient.connect(address);
-        ftpClient.login(ftpUserPair.getLeft(), ftpUserPair.getRight());
-        ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
-        if (!ftpClient.changeWorkingDirectory(imagesDirDst)) {
-          throw new CRException("FTP reply (cd): " + ftpClient.getReplyString());
+        CollectingProcessOutput rsyncOut = rsync.execute();
+        LOG.info("rsync: " + rsyncOut.getStdOut());
+        if (rsyncOut.getExitCode() != 0) {
+          throw new CRException(String.format("rsync: returned %d: %s", 
+              rsyncOut.getExitCode(), rsyncOut.getStdErr()));
         }
-        File[] srcImagesFiles = imagesDirSrcFile.listFiles();
-        for (File file : srcImagesFiles) {
-          FileInputStream fileIn = new FileInputStream(file);
-          try {
-            if (!ftpClient.storeFile(file.getName(), fileIn)) {
-              throw new CRException("FTP reply (store): " + ftpClient.getReplyString());
-            }
-          } finally {
-            fileIn.close();
-          }
-        }
-      } finally {
-        if (ftpClient.isConnected()) {
-          ftpClient.quit();
-        }
+      } catch (Exception e) {
+        throw new CRException(e);
       }
     }
     
@@ -232,11 +237,11 @@ public class ContainerCheckpointRestoreService extends AbstractService
   private final String configurationPath;
   private final String imagesDirSrcHome;
   private final String imagesDirDstHome;
-  private final Map<String, Pair<String, String> > ftpUsers;
+  private final Map<String, Pair<String, String> > loginCredentials;
   private final ConcurrentLinkedDeque<Process> receivers;
   private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, ContainerLaunchContext> > checkpointStatusStore;
   private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > openReceiverStatusStore;
-  private Pair<String, String> ftpUserGlobal = null;
+  private Pair<String, String> loginCredentialGlobal = null;
   
   public ContainerCheckpointRestoreService(Context nmContext, Dispatcher dispatcher) {
     super(ContainerCheckpointRestoreService.class.getName());
@@ -253,7 +258,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
       this.imagesDirSrcHome = String.format("/%s", IMG_SRC_DIR);
       this.imagesDirDstHome = String.format("/%s", IMG_DST_DIR);
     }
-    this.ftpUsers = new HashMap<>();
+    this.loginCredentials = new HashMap<>();
     this.receivers = new ConcurrentLinkedDeque<>();
     this.checkpointStatusStore = new ConcurrentHashMap<>();
     this.openReceiverStatusStore = new ConcurrentHashMap<>();
@@ -347,13 +352,13 @@ public class ContainerCheckpointRestoreService extends AbstractService
       String address = c.getString("address");
       String username = c.getString("username");
       String password = c.getString("password");
-      LOG.info(String.format("Read FTP user info (address=%s, username=%s)",
+      LOG.info(String.format("Read login info (address=%s, username=%s)",
           address, username));
       Pair<String, String> pair = Pair.of(username, password);
       if ("*".equals(address)) {
-        this.ftpUserGlobal = pair;
+        this.loginCredentialGlobal = pair;
       } else {
-        this.ftpUsers.put(address, pair);
+        this.loginCredentials.put(address, pair);
       }
     }
   }
@@ -435,13 +440,13 @@ public class ContainerCheckpointRestoreService extends AbstractService
     return cncrntMap.get(key);
   }
   
-  private Pair<String, String> getFtpUser(String address) throws CRException {
-    if (this.ftpUsers.containsKey(address)) {
-      return this.ftpUsers.get(address);
-    } else if (this.ftpUserGlobal != null) {
-      return this.ftpUserGlobal;
+  private Pair<String, String> getLoginCredential(String address) throws CRException {
+    if (this.loginCredentials.containsKey(address)) {
+      return this.loginCredentials.get(address);
+    } else if (this.loginCredentialGlobal != null) {
+      return this.loginCredentialGlobal;
     } else {
-      throw new CRException("No FTP user info (address: " + address + ")");
+      throw new CRException("No login info for address: " + address);
     }
   }
 }
