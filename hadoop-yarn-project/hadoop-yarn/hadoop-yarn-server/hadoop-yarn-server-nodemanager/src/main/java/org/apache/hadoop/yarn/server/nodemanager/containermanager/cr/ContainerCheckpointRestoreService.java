@@ -100,6 +100,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
       }
       Pair<String, String> loginCred = getLoginCredential(address);
       String username = loginCred.getLeft();
+      String secret = loginCred.getRight();
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "dump", "--page-server", "--images-dir", imagesDirSrc,
           "--address", address, "--port", Integer.valueOf(port).toString(),
@@ -124,18 +125,19 @@ public class ContainerCheckpointRestoreService extends AbstractService
         throw new CRException(
             String.format("criu dump returned %d", exitValue));
       }
-      rsync(imagesDirSrc + "/", username, address, imagesDirDst);
+      rsync(imagesDirSrc + "/", username, address, secret, imagesDirDst);
       String logDir = container.getLogDir();
-      rsync(logDir + "/", username, address, logDir);
+      rsync(logDir + "/", username, address, secret, logDir);
       String workDir = container.getWorkDir();
-      rsync(workDir + "/", username, address, workDir);
+      rsync(workDir + "/", username, address, secret, workDir);
     }
 
     private void rsync(String srcDir, String username, String address,
-        String dstDir) throws CRException {
+        String secret, String dstDir) throws CRException {
+      String rsh = String.format("ssh -i %s", secret);
       String url = String.format("%s@%s:%s", username, address, dstDir);
       LOG.info(String.format("rsync %s %s", srcDir, url));
-      RSync rsync = new RSync().archive(true).source(srcDir)
+      RSync rsync = new RSync().archive(true).rsh(rsh).source(srcDir)
           .destination(url);
       try {
         CollectingProcessOutput rsyncOut = rsync.execute();
@@ -206,7 +208,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
       File logFile = new File(getPath(imagesDir, PAGE_SERVER_LOG));
       logFile.createNewFile();
       ProcessBuilder processBuilder = new ProcessBuilder(
-          "criu", "page-server", "--images-dir", imagesDir,
+          "criu", "page-server", "--daemon", "--images-dir", imagesDir,
           "--port", Integer.valueOf(port).toString());
       processBuilder.redirectErrorStream(true);
       processBuilder.redirectOutput(logFile);
@@ -352,10 +354,10 @@ public class ContainerCheckpointRestoreService extends AbstractService
     for(HierarchicalConfiguration<ImmutableNode> c : ftNodes) {
       String address = c.getString("address");
       String username = c.getString("username");
-      String password = c.getString("password");
+      String secret = c.getString("secret");
       LOG.info(String.format("Read login info (address=%s, username=%s)",
           address, username));
-      Pair<String, String> pair = Pair.of(username, password);
+      Pair<String, String> pair = Pair.of(username, secret);
       if ("*".equals(address)) {
         this.loginCredentialGlobal = pair;
       } else {
