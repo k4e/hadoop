@@ -156,26 +156,22 @@ public class RMContainerMigrationService extends AbstractService {
         = getContainerMgrProxy(migrationId, sourceNodeId, applicationAttemptId);
     ContainerManagementProtocol destinationContainerManager
         = getContainerMgrProxy(migrationId, destinationNodeId, applicationAttemptId);
-    // 移行先ノードでページサーバを起動する
+    // 移行先のディレクトリを作成する
     ContainerId destinationContainerId =
         rmDestinationContainer.getContainerId();
-    ContainerMigrationProcessRequest openReceiverRequest =
+    ContainerMigrationProcessRequest createImagesDirRequest =
         ContainerMigrationProcessRequest.newInstance(migrationId,
         ContainerMigrationProcessType.PRE_RESTORE, sourceContainerId,
         destinationContainerId);
-    openReceiverRequest.setPort(DEFAULT_PAGE_SERVER_PORT);
-    ContainerMigrationProcessResponse openReceiver =
-        destinationContainerManager.processContainerMigration(openReceiverRequest);
-    if (openReceiver.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
-      throw new YarnException("OpenReceiver not success");
-    }
-    if (!openReceiver.hasImagesDir()) {
-      throw new YarnException("OpenPageServerResponse.imagesDir == null");
-    }
-    String imagesDir = openReceiver.getImagesDir();
+    ContainerMigrationProcessResponse createImagesDirResponse =
+        destinationContainerManager.processContainerMigration(
+            createImagesDirRequest);
+    String imagesDirDst = createImagesDirResponse.getImagesDir();
     // チェックポイント リクエストを送信する
     InetAddress destinationAddress;
+    InetAddress sourceAddress;
     try {
+      sourceAddress = InetAddress.getByName(sourceHost);
       destinationAddress = InetAddress.getByName(destinationHost);
     } catch (UnknownHostException e) {
       LOG.error(e.toString());
@@ -183,11 +179,11 @@ public class RMContainerMigrationService extends AbstractService {
     }
     ContainerMigrationProcessRequest checkpointRequest =
         ContainerMigrationProcessRequest.newInstance(migrationId,
-        ContainerMigrationProcessType.PRE_CHECKPOINT, sourceContainerId,
+        ContainerMigrationProcessType.DO_CHECKPOINT, sourceContainerId,
         destinationContainerId);
     checkpointRequest.setAddress(destinationAddress.getHostAddress());
     checkpointRequest.setPort(DEFAULT_PAGE_SERVER_PORT);
-    checkpointRequest.setImagesDir(imagesDir);
+    checkpointRequest.setImagesDir(imagesDirDst);
     ContainerMigrationProcessResponse checkpointResponse =
         sourceContainerManager.processContainerMigration(checkpointRequest);
     if (checkpointResponse.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
@@ -198,10 +194,26 @@ public class RMContainerMigrationService extends AbstractService {
     if (launchContext == null) {
       throw new YarnException("CheckpointResponse.containerLaunchContext == null");
     }
+    // 移行先ノードで lazy-pages デーモンを起動する
+    ContainerMigrationProcessRequest openReceiverRequest =
+        ContainerMigrationProcessRequest.newInstance(migrationId,
+        ContainerMigrationProcessType.DO_RESTORE, sourceContainerId,
+        destinationContainerId);
+    checkpointRequest.setAddress(sourceAddress.getHostAddress());
+    openReceiverRequest.setPort(DEFAULT_PAGE_SERVER_PORT);
+    openReceiverRequest.setImagesDir(imagesDirDst);
+    ContainerMigrationProcessResponse openReceiverResponse =
+        destinationContainerManager.processContainerMigration(openReceiverRequest);
+    if (openReceiverResponse.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
+      throw new YarnException("OpenReceiver not success");
+    }
+    if (!openReceiverResponse.hasImagesDir()) {
+      throw new YarnException("OpenReceiverResponse.imagesDir == null");
+    }
     // リストア コンテナを開始する
     String restoreCommand = String.format(
-        "unshare --pid --mount --fork --mount-proc criu restore --images-dir %s --tcp-established --tcp-close --shell-job -vvvv",
-        imagesDir);
+        "unshare --pid --mount --fork --mount-proc criu restore --images-dir %s --lazy-pages --tcp-established --tcp-close --shell-job --work-dir %s -vvvv",
+        imagesDirDst, imagesDirDst);
     List<String> commands = Collections.singletonList(restoreCommand);
     ContainerLaunchContext newLaunchContext =
         ContainerLaunchContext.newInstance(
@@ -230,7 +242,7 @@ public class RMContainerMigrationService extends AbstractService {
         destinationContainerManager.startContainers(startContainersRequest);
     // 終了処理を行う
     boolean completing = checkCompleting(checkpointResponse,
-        openReceiver, startContainersResponse, destinationContainerId);
+        openReceiverResponse, startContainersResponse, destinationContainerId);
     if (completing) {
       // TODO 成功時の後処理
     }

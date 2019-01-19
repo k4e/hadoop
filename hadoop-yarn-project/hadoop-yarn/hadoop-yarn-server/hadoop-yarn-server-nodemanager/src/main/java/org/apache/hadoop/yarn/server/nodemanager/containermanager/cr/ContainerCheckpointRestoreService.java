@@ -62,7 +62,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
   private final static String CONFIGURATION_FILE = "etc/hadoop/migration-settings.xml";
   private final static String IMG_SRC_DIR = "tmp/imgsrc";
   private final static String IMG_DST_DIR = "tmp/imgdst";
-  private final static String PAGE_SERVER_LOG = "criu.pgsv.log";
+  private final static String CRIU_LOGS_DIR = "tmp/criu-logs";
   private final static long WAIT_TIMEOUT_MS = 30000;
   
   class Checkpoint {
@@ -105,21 +105,49 @@ public class ContainerCheckpointRestoreService extends AbstractService
       Pair<String, String> loginCred = getLoginCredential(address);
       String username = loginCred.getLeft();
       String secret = loginCred.getRight();
-      String actionScriptPath = getPath(imagesDirSrc, "yarn-criu-action-script.sh");
+      String actionScriptPath = getLocalFileName(id, containerId, "as.sh");
       String logDir = container.getLogDir();
       String workDir = container.getWorkDir();
       List<Pair<String, String> > srcDstDir = Arrays.asList(
           Pair.of(imagesDirSrc + "/", imagesDirDst),
           Pair.of(logDir + "/", logDir),
           Pair.of(workDir + "/", workDir));
+      String okFilePath = getLocalFileName(id, containerId, "dump.ok");
       File actionScriptFile = createActionScript(srcDstDir, username, address,
-          secret, actionScriptPath);
+          secret, okFilePath, actionScriptPath);
+      File logFile = new File(getLocalFileName(id, containerId, "dump.log"));
+      logFile.createNewFile();
       ProcessBuilder processBuilder = new ProcessBuilder(
-          "criu", "dump", "--page-server", "--images-dir", imagesDirSrc,
-          "--address", address, "--port", Integer.valueOf(port).toString(),
-          "--tree", processId, "--leave-stopped", "--tcp-established",
-          "--shell-job", "--action-script", actionScriptFile.getCanonicalPath());
+          "criu", "dump", "--tree", processId, "--images-dir", imagesDirSrc,
+          "--lazy-pages", "--port", Integer.valueOf(port).toString(),
+          "--leave-stopped", "--tcp-established", "--shell-job",
+          "--action-script", actionScriptFile.getCanonicalPath());
       processBuilder.redirectErrorStream(true);
+      processBuilder.redirectOutput(logFile);
+      LOG.info(processBuilder.command().toString());
+      Process process = processBuilder.start();
+      daemons.push(process);
+      final long timeNow = System.currentTimeMillis();
+      while (System.currentTimeMillis() - timeNow < WAIT_TIMEOUT_MS) {
+        if (!process.isAlive()) {
+          int exitValue = process.exitValue();
+          if (exitValue != 0) {
+            throw new CRException(
+                String.format("criu dump returned %d", exitValue));
+          }
+        }
+        File okFile = new File(okFilePath);
+        if (okFile.exists()) {
+          return;
+        }
+        try {
+          Thread.sleep(10);
+        } catch (InterruptedException e) {
+          throw new CRException(e);
+        }
+      }
+      throw new CRException("checkpoint timeout");
+      /*
       int exitValue;
       try {
         Process process = processBuilder.start();
@@ -138,13 +166,16 @@ public class ContainerCheckpointRestoreService extends AbstractService
         throw new CRException(
             String.format("criu dump returned %d", exitValue));
       }
-      // rsync(imagesDirSrc + "/", username, address, secret, imagesDirDst);
-      // rsync(logDir + "/", username, address, secret, logDir);
-      // rsync(workDir + "/", username, address, secret, workDir);
+      */ /*
+      rsync(imagesDirSrc + "/", username, address, secret, imagesDirDst);
+      rsync(logDir + "/", username, address, secret, logDir);
+      rsync(workDir + "/", username, address, secret, workDir);
+      */
     }
     
     private File createActionScript(List<Pair<String, String> > srcDstDir,
-        String username, String address, String secret, String filepath)
+        String username, String address, String secret, String okFileName,
+        String scriptFileName)
         throws IOException {
       List<String> lines = Lists.newArrayList();
       for(Pair<String, String> sd : srcDstDir) {
@@ -154,7 +185,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
             secret, src, username, address, dst);
         lines.add(line);
       }
-      File file = new File(filepath);
+      File file = new File(scriptFileName);
       file.createNewFile();
       BufferedWriter writer = new BufferedWriter(new FileWriter(file));
       writer.write("if [ ${CRTOOLS_SCRIPT_ACTION} = \"post-dump\" ];");
@@ -165,6 +196,8 @@ public class ContainerCheckpointRestoreService extends AbstractService
         writer.write("  " + line + ";");
         writer.newLine();
       }
+      writer.write("  touch " + okFileName);
+      writer.newLine();
       writer.write("fi");
       writer.newLine();
       writer.close();
@@ -227,33 +260,32 @@ public class ContainerCheckpointRestoreService extends AbstractService
     public void execute() {
       long id = request.getId();
       final ContainerId sourceContainerId = request.getSourceContainerId();
-      final int destinationPort = request.getPort();
-      final String imagesDir = getImagesDirDst(id, sourceContainerId);
+      final String address = request.getAddress();
+      final int port = request.getPort();
+      final String imagesDir = request.getImagesDir();
       try {
-        executeInternal(destinationPort, imagesDir);
-        onSuccess(id, destinationPort, imagesDir);
+        executeInternal(id, sourceContainerId, address, port, imagesDir);
+        onSuccess(id, port, imagesDir);
       } catch(CRException | IOException e) {
         LOG.error(ExceptionUtils.getStackTrace(e));
-        onFailure(id, destinationPort, imagesDir, e.toString());
+        onFailure(id, port, imagesDir, e.toString());
       }
     }
     
-    private void executeInternal(int port, String imagesDir)
+    private void executeInternal(long id, ContainerId sourceContainerId,
+        String address, int port, String imagesDir)
         throws CRException, IOException {
-      makeDirectory(imagesDir);
-      File imagesDirFile = new File(imagesDir);
-      imagesDirFile.setReadable(true, false);
-      imagesDirFile.setWritable(true, false);
-      imagesDirFile.setExecutable(true, false);
-      File logFile = new File(getPath(imagesDir, PAGE_SERVER_LOG));
+      File logFile = new File(getLocalFileName(id, sourceContainerId, "lzpg.log"));
       logFile.createNewFile();
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "lazy-pages", "--images-dir", imagesDir, "--page-server",
-          "--port", Integer.valueOf(port).toString());
+          "--address", address, "--port", Integer.valueOf(port).toString(),
+          "--work-dir", imagesDir);
       processBuilder.redirectErrorStream(true);
       processBuilder.redirectOutput(logFile);
+      LOG.info(processBuilder.command().toString());
       Process process = processBuilder.start();
-      receivers.push(process);
+      daemons.push(process);
     }
     
     private void onSuccess(long id, int port, String imagesDir) {
@@ -280,8 +312,9 @@ public class ContainerCheckpointRestoreService extends AbstractService
   private final String configurationPath;
   private final String imagesDirSrcHome;
   private final String imagesDirDstHome;
+  private final String criuLogsDir;
   private final Map<String, Pair<String, String> > loginCredentials;
-  private final ConcurrentLinkedDeque<Process> receivers;
+  private final ConcurrentLinkedDeque<Process> daemons;
   private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, ContainerLaunchContext> > checkpointStatusStore;
   private final ConcurrentHashMap<Pair<Long, Integer>, Pair<Integer, String> > openReceiverStatusStore;
   private Pair<String, String> loginCredentialGlobal = null;
@@ -296,13 +329,15 @@ public class ContainerCheckpointRestoreService extends AbstractService
       this.configurationPath = String.format("/%s/%s", hadoopHome, CONFIGURATION_FILE);
       this.imagesDirSrcHome = String.format("/%s/%s", hadoopHome, IMG_SRC_DIR);
       this.imagesDirDstHome = String.format("/%s/%s", hadoopHome, IMG_DST_DIR);
+      this.criuLogsDir = String.format("/%s/%s", hadoopHome, CRIU_LOGS_DIR);
     } else {
       this.configurationPath = String.format("/%s", CONFIGURATION_FILE);
       this.imagesDirSrcHome = String.format("/%s", IMG_SRC_DIR);
       this.imagesDirDstHome = String.format("/%s", IMG_DST_DIR);
+      this.criuLogsDir = String.format("/%s", CRIU_LOGS_DIR);
     }
     this.loginCredentials = new HashMap<>();
-    this.receivers = new ConcurrentLinkedDeque<>();
+    this.daemons = new ConcurrentLinkedDeque<>();
     this.checkpointStatusStore = new ConcurrentHashMap<>();
     this.openReceiverStatusStore = new ConcurrentHashMap<>();
   }
@@ -310,15 +345,16 @@ public class ContainerCheckpointRestoreService extends AbstractService
   @Override
   public void serviceStart() throws Exception {
     super.serviceStart();
+    makeDirectory(criuLogsDir);
     loadConfiguration();
   }
   
   @Override
   public void serviceStop() throws Exception {
     super.serviceStop();
-    synchronized (this.receivers) {
-      while (!this.receivers.isEmpty()) {
-        Process process = this.receivers.pop();
+    synchronized (this.daemons) {
+      while (!this.daemons.isEmpty()) {
+        Process process = this.daemons.pop();
         if (process.isAlive()) {
           process.destroy();
         }
@@ -336,11 +372,29 @@ public class ContainerCheckpointRestoreService extends AbstractService
           checkpointEvent.getProcessId(), checkpointEvent.getRequest());
       break;
     case OPEN_RECEIVER:
-      ContainerCROpenReceiver restoreEvent =
-          (ContainerCROpenReceiver)event;
-      executeOpenReceiver(restoreEvent.getRequest());
+      ContainerCROpenReceiverEvent openReceiverEvent =
+          (ContainerCROpenReceiverEvent)event;
+      executeOpenReceiver(openReceiverEvent.getRequest());
       break;
     }
+  }
+  
+  // TODO: イベントハンドラ形式に直す
+  public ContainerMigrationProcessResponse createImagesDir(
+      ContainerMigrationProcessRequest request) {
+    long id = request.getId();
+    ContainerId sourceContainerId = request.getSourceContainerId();
+    String imagesDir = getImagesDirDst(id, sourceContainerId);
+    makeDirectory(imagesDir);
+    File imagesDirFile = new File(imagesDir);
+    imagesDirFile.setReadable(true, false);
+    imagesDirFile.setWritable(true, false);
+    imagesDirFile.setExecutable(true, false);
+    ContainerMigrationProcessResponse response =
+        ContainerMigrationProcessResponse.newInstance(
+            id, ContainerMigrationProcessResponse.SUCCESS);
+    response.setImagesDir(imagesDir);
+    return response;
   }
   
   public ContainerMigrationProcessResponse getCheckpointResponse(
@@ -457,6 +511,11 @@ public class ContainerCheckpointRestoreService extends AbstractService
   private String getImagesDirDst(long id, ContainerId containerId) {
     return getPath(imagesDirDstHome,
         String.format("%d_%s", id, containerId.toString()));
+  }
+  
+  private String getLocalFileName(long id, ContainerId containerId, String ext) {
+    return getPath(criuLogsDir, String.format(
+        "%d_%s.%s", id, containerId.toString(), ext));
   }
   
   private boolean makeDirectory(String path) {

@@ -23,7 +23,7 @@ import com.google.protobuf.ByteString;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.UpdateContainerTokenEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCheckpointRestoreService;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCREventType;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCROpenReceiver;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.cr.ContainerCROpenReceiverEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.event.LogHandlerTokenUpdatedEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.scheduler.ContainerSchedulerEvent;
 import org.slf4j.Logger;
@@ -1947,12 +1947,12 @@ public class ContainerManagerImpl extends CompositeService implements
     ContainerMigrationProcessResponse response = ContainerMigrationProcessResponse
         .newInstance(id, ContainerMigrationProcessResponse.FAILURE);
     switch (processType) {
-    case PRE_RESTORE:
-      this.dispatcher.getEventHandler().handle(
-          new ContainerCROpenReceiver(request));
-      response = this.containerCheckpointRestore.getOpenReceiverResponse(request);
-      break;
     case PRE_CHECKPOINT:
+      break;
+    case PRE_RESTORE:
+      response = this.containerCheckpointRestore.createImagesDir(request);
+      break;
+    case DO_CHECKPOINT:
       Container sourceContainer = this.context.getContainers()
           .get(sourceContainerId);
       if (sourceContainer == null) {
@@ -1963,6 +1963,11 @@ public class ContainerManagerImpl extends CompositeService implements
       this.dispatcher.getEventHandler().handle(
           new CheckpointContainersLauncherEvent(sourceContainer, request));
       response = this.containerCheckpointRestore.getCheckpointResponse(request);
+      break;
+    case DO_RESTORE:
+      this.dispatcher.getEventHandler().handle(
+          new ContainerCROpenReceiverEvent(request));
+      response = this.containerCheckpointRestore.getOpenReceiverResponse(request);
       break;
     case POST_CHECKPOINT:
       break;

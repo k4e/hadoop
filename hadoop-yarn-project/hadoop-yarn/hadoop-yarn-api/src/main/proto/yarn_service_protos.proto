@@ -416,10 +416,12 @@ message ContainerUpdateResponseProto {
 enum ContainerMigrationProcessTypeProto {
   PRE_CHECKPOINT = 1;
   PRE_RESTORE = 2;
-  POST_CHECKPOINT = 3;
-  POST_RESTORE = 4;
-  ABORT_CHECKPOINT = 5;
-  ABORT_RESTORE = 6;
+  DO_CHECKPOINT = 3;
+  DO_RESTORE = 4;
+  POST_CHECKPOINT = 5;
+  POST_RESTORE = 6;
+  ABORT_CHECKPOINT = 7;
+  ABORT_RESTORE = 8;
 }
 
 message ContainerMigrationProcessRequestProto {
