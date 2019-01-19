@@ -163,7 +163,7 @@ public class RMContainerMigrationService extends AbstractService {
         ContainerMigrationProcessRequest.newInstance(migrationId,
         ContainerMigrationProcessType.PRE_RESTORE, sourceContainerId,
         destinationContainerId);
-    openReceiverRequest.setDestinationPort(DEFAULT_PAGE_SERVER_PORT);
+    openReceiverRequest.setPort(DEFAULT_PAGE_SERVER_PORT);
     ContainerMigrationProcessResponse openReceiver =
         destinationContainerManager.processContainerMigration(openReceiverRequest);
     if (openReceiver.getStatus() != ContainerMigrationProcessResponse.SUCCESS) {
@@ -185,8 +185,8 @@ public class RMContainerMigrationService extends AbstractService {
         ContainerMigrationProcessRequest.newInstance(migrationId,
         ContainerMigrationProcessType.PRE_CHECKPOINT, sourceContainerId,
         destinationContainerId);
-    checkpointRequest.setDestinationAddress(destinationAddress.getHostAddress());
-    checkpointRequest.setDestinationPort(DEFAULT_PAGE_SERVER_PORT);
+    checkpointRequest.setAddress(destinationAddress.getHostAddress());
+    checkpointRequest.setPort(DEFAULT_PAGE_SERVER_PORT);
     checkpointRequest.setImagesDir(imagesDir);
     ContainerMigrationProcessResponse checkpointResponse =
         sourceContainerManager.processContainerMigration(checkpointRequest);

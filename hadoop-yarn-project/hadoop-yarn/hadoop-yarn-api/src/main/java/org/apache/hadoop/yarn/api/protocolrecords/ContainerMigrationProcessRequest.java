@@ -57,27 +57,27 @@ public abstract class ContainerMigrationProcessRequest {
   
   @Public
   @Unstable
-  public abstract boolean hasDestinationAddress();
+  public abstract boolean hasAddress();
   
   @Public
   @Unstable
-  public abstract String getDestinationAddress();
+  public abstract String getAddress();
   
   @Public
   @Unstable
-  public abstract void setDestinationAddress(String destinationAddress);
+  public abstract void setAddress(String address);
   
   @Public
   @Unstable
-  public abstract boolean hasDestinationPort();
+  public abstract boolean hasPort();
   
   @Public
   @Unstable
-  public abstract int getDestinationPort();
+  public abstract int getPort();
   
   @Public
   @Unstable
-  public abstract void setDestinationPort(int port);
+  public abstract void setPort(int port);
   
   @Public
   @Unstable

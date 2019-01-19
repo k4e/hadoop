@@ -1,16 +1,19 @@
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.cr;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipalLookupService;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -44,6 +47,7 @@ import org.slf4j.LoggerFactory;
 
 import com.github.fracpete.processoutput4j.output.CollectingProcessOutput;
 import com.github.fracpete.rsync4j.RSync;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.jcraft.jsch.Channel;
 import com.jcraft.jsch.ChannelSftp;
@@ -77,8 +81,8 @@ public class ContainerCheckpointRestoreService extends AbstractService
       final long id = request.getId();
       ContainerId containerId = container.getContainerTokenIdentifier()
           .getContainerID();
-      final int port = request.getDestinationPort();
-      final String address = request.getDestinationAddress();
+      final int port = request.getPort();
+      final String address = request.getAddress();
       final String imagesDirSrc = getImagesSrcDst(id, containerId);
       final String imagesDirDst = request.getImagesDir();
       final String user = container.getUser();
@@ -101,11 +105,20 @@ public class ContainerCheckpointRestoreService extends AbstractService
       Pair<String, String> loginCred = getLoginCredential(address);
       String username = loginCred.getLeft();
       String secret = loginCred.getRight();
+      String actionScriptPath = getPath(imagesDirSrc, "yarn-criu-action-script.sh");
+      String logDir = container.getLogDir();
+      String workDir = container.getWorkDir();
+      List<Pair<String, String> > srcDstDir = Arrays.asList(
+          Pair.of(imagesDirSrc + "/", imagesDirDst),
+          Pair.of(logDir + "/", logDir),
+          Pair.of(workDir + "/", workDir));
+      File actionScriptFile = createActionScript(srcDstDir, username, address,
+          secret, actionScriptPath);
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "dump", "--page-server", "--images-dir", imagesDirSrc,
           "--address", address, "--port", Integer.valueOf(port).toString(),
           "--tree", processId, "--leave-stopped", "--tcp-established",
-          "--shell-job");
+          "--shell-job", "--action-script", actionScriptFile.getCanonicalPath());
       processBuilder.redirectErrorStream(true);
       int exitValue;
       try {
@@ -125,11 +138,38 @@ public class ContainerCheckpointRestoreService extends AbstractService
         throw new CRException(
             String.format("criu dump returned %d", exitValue));
       }
-      rsync(imagesDirSrc + "/", username, address, secret, imagesDirDst);
-      String logDir = container.getLogDir();
-      rsync(logDir + "/", username, address, secret, logDir);
-      String workDir = container.getWorkDir();
-      rsync(workDir + "/", username, address, secret, workDir);
+      // rsync(imagesDirSrc + "/", username, address, secret, imagesDirDst);
+      // rsync(logDir + "/", username, address, secret, logDir);
+      // rsync(workDir + "/", username, address, secret, workDir);
+    }
+    
+    private File createActionScript(List<Pair<String, String> > srcDstDir,
+        String username, String address, String secret, String filepath)
+        throws IOException {
+      List<String> lines = Lists.newArrayList();
+      for(Pair<String, String> sd : srcDstDir) {
+        String src = sd.getLeft();
+        String dst = sd.getRight();
+        String line = String.format("rsync -a -e\"ssh -i %s\" %s %s@%s:%s",
+            secret, src, username, address, dst);
+        lines.add(line);
+      }
+      File file = new File(filepath);
+      file.createNewFile();
+      BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+      writer.write("if [ ${CRTOOLS_SCRIPT_ACTION} = \"post-dump\" ];");
+      writer.newLine();
+      writer.write("then");
+      writer.newLine();
+      for (String line : lines) {
+        writer.write("  " + line + ";");
+        writer.newLine();
+      }
+      writer.write("fi");
+      writer.newLine();
+      writer.close();
+      file.setExecutable(true);
+      return file;
     }
 
     private void rsync(String srcDir, String username, String address,
@@ -187,7 +227,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
     public void execute() {
       long id = request.getId();
       final ContainerId sourceContainerId = request.getSourceContainerId();
-      final int destinationPort = request.getDestinationPort();
+      final int destinationPort = request.getPort();
       final String imagesDir = getImagesDirDst(id, sourceContainerId);
       try {
         executeInternal(destinationPort, imagesDir);
@@ -208,7 +248,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
       File logFile = new File(getPath(imagesDir, PAGE_SERVER_LOG));
       logFile.createNewFile();
       ProcessBuilder processBuilder = new ProcessBuilder(
-          "criu", "page-server", "--daemon", "--images-dir", imagesDir,
+          "criu", "lazy-pages", "--images-dir", imagesDir, "--page-server",
           "--port", Integer.valueOf(port).toString());
       processBuilder.redirectErrorStream(true);
       processBuilder.redirectOutput(logFile);

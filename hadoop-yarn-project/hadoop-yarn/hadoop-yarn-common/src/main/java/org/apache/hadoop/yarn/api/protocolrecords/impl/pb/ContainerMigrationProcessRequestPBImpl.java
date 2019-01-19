@@ -107,39 +107,39 @@ public class ContainerMigrationProcessRequestPBImpl extends ContainerMigrationPr
   }
   
   @Override
-  public boolean hasDestinationAddress() {
+  public boolean hasAddress() {
     ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
-    return p.hasDestinationAddress();
+    return p.hasAddress();
   }
   
   @Override
-  public String getDestinationAddress() {
+  public String getAddress() {
     ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
-    return p.getDestinationAddress();
+    return p.getAddress();
   }
   
   @Override
-  public void setDestinationAddress(String destinationAddress) {
+  public void setAddress(String destinationAddress) {
     maybeInitBuilder();
-    this.builder.setDestinationAddress(destinationAddress);
+    this.builder.setAddress(destinationAddress);
   }
   
   @Override
-  public boolean hasDestinationPort() {
+  public boolean hasPort() {
     ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
-    return p.hasDestinationPort();
+    return p.hasPort();
   }
   
   @Override
-  public int getDestinationPort() {
+  public int getPort() {
     ContainerMigrationProcessRequestProtoOrBuilder p = viaProto ? proto : builder;
-    return p.getDestinationPort();
+    return p.getPort();
   }
   
   @Override
-  public void setDestinationPort(int destinationPort) {
+  public void setPort(int destinationPort) {
     maybeInitBuilder();
-    this.builder.setDestinationPort(destinationPort);
+    this.builder.setPort(destinationPort);
   }
   
   @Override
