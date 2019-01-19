@@ -108,10 +108,12 @@ public class ContainerCheckpointRestoreService extends AbstractService
       String actionScriptPath = getLocalFileName(id, containerId, "as.sh");
       String logDir = container.getLogDir();
       String workDir = container.getWorkDir();
+      String jvmTmpDir = getJvmTmpDir();
       List<Pair<String, String> > srcDstDir = Arrays.asList(
           Pair.of(imagesDirSrc + "/", imagesDirDst),
           Pair.of(logDir + "/", logDir),
-          Pair.of(workDir + "/", workDir));
+          Pair.of(workDir + "/", workDir),
+          Pair.of(jvmTmpDir + "/", jvmTmpDir + "/"));
       String okFilePath = getLocalFileName(id, containerId, "dump.ok");
       File actionScriptFile = createActionScript(srcDstDir, username, address,
           secret, okFilePath, actionScriptPath);
@@ -185,6 +187,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
             secret, src, username, address, dst);
         lines.add(line);
       }
+      lines.add("touch " + okFileName);
       File file = new File(scriptFileName);
       file.createNewFile();
       BufferedWriter writer = new BufferedWriter(new FileWriter(file));
@@ -196,8 +199,6 @@ public class ContainerCheckpointRestoreService extends AbstractService
         writer.write("  " + line + ";");
         writer.newLine();
       }
-      writer.write("  touch " + okFileName);
-      writer.newLine();
       writer.write("fi");
       writer.newLine();
       writer.close();
@@ -516,6 +517,11 @@ public class ContainerCheckpointRestoreService extends AbstractService
   private String getLocalFileName(long id, ContainerId containerId, String ext) {
     return getPath(criuLogsDir, String.format(
         "%d_%s.%s", id, containerId.toString(), ext));
+  }
+  
+  private String getJvmTmpDir() {
+    String localUser = System.getProperty("user.name");
+    return String.format("/tmp/hsperfdata_%s", localUser);
   }
   
   private boolean makeDirectory(String path) {

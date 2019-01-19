@@ -199,7 +199,7 @@ public class RMContainerMigrationService extends AbstractService {
         ContainerMigrationProcessRequest.newInstance(migrationId,
         ContainerMigrationProcessType.DO_RESTORE, sourceContainerId,
         destinationContainerId);
-    checkpointRequest.setAddress(sourceAddress.getHostAddress());
+    openReceiverRequest.setAddress(sourceAddress.getHostAddress());
     openReceiverRequest.setPort(DEFAULT_PAGE_SERVER_PORT);
     openReceiverRequest.setImagesDir(imagesDirDst);
     ContainerMigrationProcessResponse openReceiverResponse =
