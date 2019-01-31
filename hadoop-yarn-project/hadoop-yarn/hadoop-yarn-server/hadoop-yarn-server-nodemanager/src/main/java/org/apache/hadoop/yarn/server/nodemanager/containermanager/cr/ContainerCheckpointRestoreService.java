@@ -123,7 +123,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
           "criu", "dump", "--tree", processId, "--images-dir", imagesDirSrc,
           "--lazy-pages", "--port", Integer.valueOf(port).toString(),
           "--leave-stopped", "--tcp-established", "--shell-job",
-          "--action-script", actionScriptFile.getCanonicalPath());
+          "--action-script", actionScriptFile.getCanonicalPath(), "-vvvv");
       processBuilder.redirectErrorStream(true);
       processBuilder.redirectOutput(logFile);
       LOG.info(processBuilder.command().toString());
@@ -183,14 +183,25 @@ public class ContainerCheckpointRestoreService extends AbstractService
       for(Pair<String, String> sd : srcDstDir) {
         String src = sd.getLeft();
         String dst = sd.getRight();
-        String line = String.format("rsync -a -e\"ssh -i %s\" %s %s@%s:%s",
-            secret, src, username, address, dst);
+        String line = String.format("rsync -a -e\"ssh -i %s\" --rsync-path=\"mkdir -p %s && rsync\" %s %s@%s:%s",
+            secret, dst, src, username, address, dst);
         lines.add(line);
       }
       lines.add("touch " + okFileName);
+      lines.add("echo POST-DUMP `date +%s.%9N` `date` >> /home/x0unnamed/time-epoch/time.txt");
       File file = new File(scriptFileName);
       file.createNewFile();
       BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+      writer.write("echo --");
+      writer.newLine();
+      writer.write("if [ ${CRTOOLS_SCRIPT_ACTION} = \"pre-dump\" ];");
+      writer.newLine();
+      writer.write("then");
+      writer.newLine();
+      writer.write("  echo PRE-DUMP `date +%s.%9N` `date` >> /home/x0unnamed/time-epoch/time.txt;");
+      writer.newLine();
+      writer.write("fi");
+      writer.newLine();
       writer.write("if [ ${CRTOOLS_SCRIPT_ACTION} = \"post-dump\" ];");
       writer.newLine();
       writer.write("then");
@@ -281,7 +292,7 @@ public class ContainerCheckpointRestoreService extends AbstractService
       ProcessBuilder processBuilder = new ProcessBuilder(
           "criu", "lazy-pages", "--images-dir", imagesDir, "--page-server",
           "--address", address, "--port", Integer.valueOf(port).toString(),
-          "--work-dir", imagesDir);
+          "--work-dir", imagesDir, "-vvvv");
       processBuilder.redirectErrorStream(true);
       processBuilder.redirectOutput(logFile);
       LOG.info(processBuilder.command().toString());

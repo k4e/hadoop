@@ -1845,6 +1845,7 @@ public class ClientRMService extends AbstractService implements
   @Override
   public ContainerMigrationResponse moveContainer(
       ContainerMigrationRequest request) throws YarnException, IOException {
+    long nanoStart = System.nanoTime();
     ContainerId sourceContainerId = request.getContainerId();
     NodeId destinationNodeId = request.getDestination();
     UserGroupInformation callerUGI;
@@ -1904,6 +1905,8 @@ public class ClientRMService extends AbstractService implements
     }
     RMAuditLogger.logSuccess(callerUGI.getShortUserName(),
         AuditConstants.CONTAINER_MIGRATION, "ClientRMService", applicationId);
+    long timeElapsedNano = System.nanoTime() - nanoStart;
+    LOG.info("[MIGRATION PROCESS TIME] " + timeElapsedNano + " ns");
     return recordFactory.newRecordInstance(ContainerMigrationResponse.class);
   }
 

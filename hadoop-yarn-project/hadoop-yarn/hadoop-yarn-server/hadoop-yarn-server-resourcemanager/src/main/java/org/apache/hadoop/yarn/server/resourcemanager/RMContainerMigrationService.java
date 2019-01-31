@@ -212,7 +212,7 @@ public class RMContainerMigrationService extends AbstractService {
     }
     // リストア コンテナを開始する
     String restoreCommand = String.format(
-        "unshare --pid --mount --fork --mount-proc criu restore --images-dir %s --lazy-pages --tcp-established --tcp-close --shell-job --work-dir %s -vvvv",
+        "unshare --pid --mount --fork --mount-proc criu restore --images-dir %s --lazy-pages --tcp-established --tcp-close --shell-job --work-dir %s --action-script /home/x0unnamed/time-epoch/time.sh -vvvv",
         imagesDirDst, imagesDirDst);
     List<String> commands = Collections.singletonList(restoreCommand);
     ContainerLaunchContext newLaunchContext =
